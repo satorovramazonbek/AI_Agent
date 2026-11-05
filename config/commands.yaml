@@ -1,0 +1,58 @@
+# Terminal buyruqlari siyosati (hujjatning 6.2-bo'limi).
+# R0 — faqat o'qish, R1 — xavfsiz yozish: avtomatik.
+# R2/R3 — tasdiq talab qiladi. R4 — har doim taqiqlangan.
+# Ro'yxatda yo'q buyruq -> standart holatda R2 (tasdiq).
+
+allow:
+  R0: [ls, cat, head, tail, grep, rg, find, pwd, which, df, du, ps, whoami, date, echo, wc, uname]
+  R1: [mkdir, touch, open, pytest, ruff, uvicorn]
+
+confirm:
+  R2: [mv, cp, kill, pip, poetry, uv, brew, npm, make]
+  R3: [curl, wget, scp, rsync]
+
+deny:
+  - sudo
+  - su
+  - rm
+  - mkfs
+  - dd
+  - chown
+  - eval
+  - launchctl
+  - csrutil
+  - security
+  - ssh-keygen
+  - shutdown
+  - reboot
+  - diskutil
+
+# Sub-buyruq darajasidagi qoidalar: "<buyruq> <sub>" -> daraja
+subcommands:
+  "git status": R0
+  "git log": R0
+  "git diff": R0
+  "git branch": R0
+  "git add": R2
+  "git commit": R2
+  "git checkout": R2
+  "git push": R3
+  "git reset": R3
+  "docker ps": R0
+  "docker logs": R0
+  "docker compose": R2
+  "python manage.py": R1
+  "defaults write": R4
+  "crontab -r": R4
+
+# Argumentlarda uchrasa darhol R4.
+deny_patterns:
+  - "rm -rf"
+  - "chmod -R 777"
+  - ":(){"
+  - "/dev/sd"
+  - "/dev/disk"
+  - "| sh"
+  - "| bash"
+  - "|sh"
+  - "|bash"
