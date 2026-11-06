@@ -56,5 +56,16 @@ async def voice_transcribe(file: UploadFile, language: str | None = None) -> dic
         "text": t.text,
         "language": t.language,
         "duration": t.duration,
-        "reply": await handle_text(t.text),
+        "reply": await handle_text(t.text, "api"),
     }
+
+
+class AskBody(BaseModel):
+    text: str
+    session_id: str = "api"
+
+
+@app.post("/agent/ask")
+async def agent_ask(body: AskBody) -> dict:
+    """Matnli so'rov: agent (yoki kalit bo'lmasa oddiy qoidalar) javobi."""
+    return {"reply": await handle_text(body.text, body.session_id)}

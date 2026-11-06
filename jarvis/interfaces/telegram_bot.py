@@ -58,12 +58,15 @@ def build_dispatcher(owner_id: int) -> Dispatcher:
                 await message.answer(f"Ovoz moduli ishlamayapti: {e}")
                 return
         await message.answer(f"🎙 {t.text or '(eshitilmadi)'}")
-        await message.answer(await handle_text(t.text))
+        await message.answer(await handle_text(t.text, f"tg:{message.chat.id}"))
 
     @dp.message()
-    async def fallback(message: Message) -> None:
-        # Keyingi bosqich: bu yerda xabar agent orkestratoriga Task sifatida uzatiladi.
-        await message.answer("Qabul qilindi. Agent sikli MVP'ning keyingi bosqichida ulanadi.")
+    async def fallback(message: Message, bot: Bot) -> None:
+        if not message.text:
+            await message.answer("Hozircha matn va ovozli xabarlarni tushunaman.")
+            return
+        await bot.send_chat_action(message.chat.id, "typing")
+        await message.answer(await handle_text(message.text, f"tg:{message.chat.id}"))
 
     return dp
 

@@ -3,6 +3,7 @@
 from functools import lru_cache
 from pathlib import Path
 
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -18,6 +19,13 @@ class Settings(BaseSettings):
     # Telegram: token bo'sh bo'lsa bot ishga tushmaydi (faqat API ishlaydi).
     telegram_token: str = ""
     owner_telegram_id: int = 0
+
+    # Agent modeli (Model Router). Kalit bo'lmasa agent o'chiq, oddiy qoidalar ishlaydi.
+    anthropic_api_key: str = Field(
+        default="", validation_alias=AliasChoices("JARVIS_ANTHROPIC_API_KEY", "ANTHROPIC_API_KEY")
+    )
+    model: str = "claude-opus-5-5"
+    model_effort: str = "medium"  # low | medium | high | xhigh | max
 
     # Ovoz (STT): lokal Whisper. Model birinchi ishlatilganda yuklab olinadi.
     # O'zbek tili uchun kichik modellar sust; large-v3-turbo — sifat va tezlik muvozanati.

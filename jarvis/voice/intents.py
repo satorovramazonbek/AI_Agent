@@ -1,13 +1,14 @@
-"""Ovozdan olingan matnni oddiy buyruqlarga moslash.
+"""Tanilgan matnni qayta ishlash.
 
-Bu vaqtinchalik qoida asosidagi qatlam: agent sikli (LLM) ulanganda matn to'g'ridan-to'g'ri
-orkestratorga `Task` sifatida uzatiladi, bu yerdagi qoidalar esa tezkor yo'l bo'lib qoladi.
+API kaliti bo'lsa matn agentga (Claude + tool'lar) uzatiladi. Bo'lmasa — oddiy qoidalar
+(hozircha faqat «holat») ishlaydi, shunda JARVIS kalitsiz ham javob beradi.
 """
 
 from __future__ import annotations
 
 import re
 
+from jarvis.core.agent import ask, get_agent
 from jarvis.tools.system import NoArgs, system_status
 
 STATUS_WORDS = re.compile(
@@ -23,15 +24,17 @@ async def status_text() -> str:
     )
 
 
-async def handle_text(text: str) -> str:
+async def handle_text(text: str, session_id: str = "default") -> str:
     """Tanilgan matnga javob qaytaradi."""
     text = text.strip()
     if not text:
         return "Hech narsa eshitilmadi — qaytadan, balandroq gapiring."
+    if get_agent().available:
+        return await ask(text, session_id)
     if STATUS_WORDS.search(text):
         return await status_text()
     return (
         f"Tushundim: «{text}».\n"
-        "Hozircha ovoz orqali faqat «holat» buyrug'i bajariladi; "
-        "qolganlari agent sikli ulanganda ishlaydi."
+        "Agent o'chiq (ANTHROPIC_API_KEY yo'q), shuning uchun hozircha faqat "
+        "«holat» buyrug'i bajariladi."
     )

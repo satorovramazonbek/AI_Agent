@@ -55,17 +55,22 @@ def main() -> None:
 
     print("JARVIS tinglashga tayyor. Ctrl+C — chiqish.")
     try:
-        while True:
-            input("\n🎙  Gapirish uchun Enter bosing ")
-            audio = record_until_enter()
-            if len(audio) < SAMPLE_RATE // 2:
-                print("Juda qisqa yozuv, qaytadan urinib ko'ring.")
-                continue
-            t = transcriber.transcribe_sync(audio, args.language)
-            print(f"📝 Siz: {t.text or '(eshitilmadi)'}  [{t.language}, {t.duration}s]")
-            print(f"🤖 JARVIS: {asyncio.run(handle_text(t.text))}")
+        asyncio.run(_listen_loop(transcriber, args.language))
     except (KeyboardInterrupt, EOFError):
         print("\nXayr!")
+
+
+async def _listen_loop(transcriber: Transcriber, language: str | None) -> None:
+    # Bitta event loop: API klienti va suhbat xotirasi gaplar orasida saqlanib qoladi.
+    while True:
+        await asyncio.to_thread(input, "\n🎙  Gapirish uchun Enter bosing ")
+        audio = await asyncio.to_thread(record_until_enter)
+        if len(audio) < SAMPLE_RATE // 2:
+            print("Juda qisqa yozuv, qaytadan urinib ko'ring.")
+            continue
+        t = await transcriber.transcribe(audio, language)
+        print(f"📝 Siz: {t.text or '(eshitilmadi)'}  [{t.language}, {t.duration}s]")
+        print(f"🤖 JARVIS: {await handle_text(t.text, 'mic')}")
 
 
 if __name__ == "__main__":

@@ -8,8 +8,12 @@ To'liq arxitektura hujjati: https://claude.ai/artifact/H7X3huFsHAdmwjjtCYhhjc
 - `jarvis/security/policy.py` — Policy Gateway: terminal buyruqlarini R0–R4 darajalarga ajratadi, xavflilarini bloklaydi (`config/commands.yaml`).
 - `jarvis/tools/registry.py` — Tool Registry va `@tool` dekoratori.
 - `jarvis/tools/system.py` — `system.status`, `shell.run` (faqat Policy Gateway orqali).
-- `jarvis/interfaces/api.py` — FastAPI: `/health`, `/tools`, `/policy/check`.
+- `jarvis/interfaces/api.py` — FastAPI: `/health`, `/tools`, `/policy/check`, `/agent/ask`,
+  `/voice/transcribe`.
 - `jarvis/interfaces/telegram_bot.py` — aiogram bot, faqat egasining xabarlarini qabul qiladi.
+- `jarvis/core/agent.py` — agent sikli: Claude tool'larni (Tool Registry) chaqiradi,
+  terminal buyruqlari Policy Gateway'dan o'tadi; xavfli buyruqlar bloklanadi yoki tasdiq kutadi.
+- `jarvis/models/router.py` — Model Router: LLM chaqiruvlarining yagona nuqtasi.
 - `jarvis/voice/` — ovozni tushunish: lokal Whisper (`faster-whisper`), audio Mac'dan chiqmaydi.
   Telegram ovozli xabarlari, `jarvis-voice` (Mac mikrofoni) va `POST /voice/transcribe`.
 - Docker (`jarvis` + PostgreSQL/pgvector), GitHub Actions CI/CD.
@@ -53,8 +57,20 @@ curl -F file=@ovoz.ogg http://127.0.0.1:8020/voice/transcribe
   Kuchsiz internet yoki tezlik kerak bo'lsa — `small`, lekin o'zbek tilida xato ko'payadi.
 - Til: `JARVIS_STT_LANGUAGE` (standart `uz`; bo'sh qoldirilsa avtomatik aniqlanadi).
 - Birinchi `jarvis-voice` ishga tushganda macOS Terminal'ga mikrofon ruxsatini so'raydi.
-- Hozircha ovoz orqali faqat «holat» buyrug'i bajariladi; qolgan matn agent sikli ulanganda
-  orkestratorga uzatiladi.
+- `.env` da `ANTHROPIC_API_KEY` bo'lsa, tanilgan matn agentga uzatiladi (istalgan savol/buyruq).
+  Kalit bo'lmasa faqat «holat» buyrug'i ishlaydi.
+
+## Agent
+
+```bash
+curl -s http://127.0.0.1:8020/agent/ask -H 'content-type: application/json' \
+  -d '{"text": "Diskda qancha joy qoldi?"}'
+```
+
+- Model: `JARVIS_MODEL` (standart `claude-opus-5-5`), chuqurlik: `JARVIS_MODEL_EFFORT`.
+- Rad etilgan so'rovlar uchun serverdagi zaxira model yoqilgan (`fallbacks: "default"`).
+- Suhbat xotirasi sessiya bo'yicha (Telegram chat, `mic`, `api`) — 30 daqiqa jimlikdan keyin
+  yangilanadi. Testlar haqiqiy API'ni hech qachon chaqirmaydi.
 
 ## CI/CD
 
