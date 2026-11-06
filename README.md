@@ -26,8 +26,11 @@ Lokal (Docker'siz):
 python3 -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 pytest
-python -m jarvis.main
+python -m jarvis.main         # port: JARVIS_PORT (standart 8010)
 ```
+
+> Docker'dagi JARVIS ham 8010 ni egallaydi — ikkalasini birga ishlatsangiz,
+> lokal uchun boshqa port bering: `JARVIS_PORT=8020 python -m jarvis.main`.
 
 > Eslatma: Docker konteyneri Linux VM ichida ishlaydi, shuning uchun Mac'ni boshqaradigan
 > tool'lar (dastur ochish, AppleScript, mikrofon) keyingi bosqichlarda Mac'da native ishga tushiriladi.

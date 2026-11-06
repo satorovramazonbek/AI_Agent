@@ -12,6 +12,9 @@ class Settings(BaseSettings):
     env: str = "dev"
     log_level: str = "INFO"
 
+    # API porti. Docker konteyner ichida 8000 (compose tashqariga JARVIS_PORT ni ochadi).
+    port: int = 8010
+
     # Telegram: token bo'sh bo'lsa bot ishga tushmaydi (faqat API ishlaydi).
     telegram_token: str = ""
     owner_telegram_id: int = 0

@@ -15,7 +15,8 @@ RUN pip install .
 RUN useradd --create-home --uid 1000 jarvis && mkdir -p /tmp/jarvis && chown jarvis /tmp/jarvis
 USER jarvis
 
-ENV JARVIS_HOST=0.0.0.0
+ENV JARVIS_HOST=0.0.0.0 \
+    JARVIS_PORT=8000
 EXPOSE 8000
 
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 \

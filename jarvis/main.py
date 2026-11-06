@@ -19,7 +19,12 @@ async def main() -> None:
         level=settings.log_level, format="%(asctime)s %(levelname)s %(name)s: %(message)s"
     )
     server = uvicorn.Server(
-        uvicorn.Config(app, host=os.getenv("JARVIS_HOST", "127.0.0.1"), port=8000, log_level="info")
+        uvicorn.Config(
+            app,
+            host=os.getenv("JARVIS_HOST", "127.0.0.1"),
+            port=settings.port,
+            log_level="info",
+        )
     )
     await asyncio.gather(server.serve(), run_bot())
 
