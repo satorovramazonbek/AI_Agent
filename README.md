@@ -10,6 +10,8 @@ To'liq arxitektura hujjati: https://claude.ai/artifact/H7X3huFsHAdmwjjtCYhhjc
 - `jarvis/tools/system.py` — `system.status`, `shell.run` (faqat Policy Gateway orqali).
 - `jarvis/interfaces/api.py` — FastAPI: `/health`, `/tools`, `/policy/check`.
 - `jarvis/interfaces/telegram_bot.py` — aiogram bot, faqat egasining xabarlarini qabul qiladi.
+- `jarvis/voice/` — ovozni tushunish: lokal Whisper (`faster-whisper`), audio Mac'dan chiqmaydi.
+  Telegram ovozli xabarlari, `jarvis-voice` (Mac mikrofoni) va `POST /voice/transcribe`.
 - Docker (`jarvis` + PostgreSQL/pgvector), GitHub Actions CI/CD.
 
 ## Ishga tushirish
@@ -35,6 +37,24 @@ python -m jarvis.main         # port: JARVIS_PORT (standart 8010)
 > Eslatma: Docker konteyneri Linux VM ichida ishlaydi, shuning uchun Mac'ni boshqaradigan
 > tool'lar (dastur ochish, AppleScript, mikrofon) keyingi bosqichlarda Mac'da native ishga tushiriladi.
 > Docker'da — API, Telegram bot va ma'lumotlar bazasi.
+
+## Ovoz
+
+Ovoz moduli Mac'da native ishlaydi (Docker'da o'rnatilmaydi):
+
+```bash
+pip install -e ".[voice]"
+jarvis-voice                    # Enter — gapirish, Enter — to'xtatish
+jarvis-voice --language ru      # boshqa til
+curl -F file=@ovoz.ogg http://127.0.0.1:8020/voice/transcribe
+```
+
+- Model: `JARVIS_STT_MODEL` (standart `large-v3-turbo`, ~1.6 GB, birinchi ishga tushirishda yuklanadi).
+  Kuchsiz internet yoki tezlik kerak bo'lsa — `small`, lekin o'zbek tilida xato ko'payadi.
+- Til: `JARVIS_STT_LANGUAGE` (standart `uz`; bo'sh qoldirilsa avtomatik aniqlanadi).
+- Birinchi `jarvis-voice` ishga tushganda macOS Terminal'ga mikrofon ruxsatini so'raydi.
+- Hozircha ovoz orqali faqat «holat» buyrug'i bajariladi; qolgan matn agent sikli ulanganda
+  orkestratorga uzatiladi.
 
 ## CI/CD
 

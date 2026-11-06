@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import logging
+import tempfile
+from pathlib import Path
 
 from aiogram import Bot, Dispatcher, F
 from aiogram.filters import Command
@@ -10,7 +12,8 @@ from aiogram.types import Message
 
 from jarvis.config import get_settings
 from jarvis.security.policy import CommandPolicy
-from jarvis.tools.system import NoArgs, system_status
+from jarvis.voice.intents import handle_text, status_text
+from jarvis.voice.stt import VoiceUnavailable, get_transcriber
 
 log = logging.getLogger(__name__)
 
@@ -22,15 +25,14 @@ def build_dispatcher(owner_id: int) -> Dispatcher:
 
     @dp.message(Command("start"))
     async def start(message: Message) -> None:
-        await message.answer("JARVIS ishga tushdi. Buyruqlar: /status, /check <buyruq>")
+        await message.answer(
+            "JARVIS ishga tushdi. Buyruqlar: /status, /check <buyruq>.\n"
+            "Ovozli xabar ham yuborishingiz mumkin."
+        )
 
     @dp.message(Command("status"))
     async def status(message: Message) -> None:
-        s = await system_status(NoArgs())
-        await message.answer(
-            f"OT: {s['os']}\nCPU: {s['cpu_count']} yadro, yuklama {s['load_avg_1m']}\n"
-            f"Disk: {s['disk_free_gb']} GB bo'sh ({s['disk_used_pct']}% band)"
-        )
+        await message.answer(await status_text())
 
     @dp.message(Command("check"))
     async def check(message: Message) -> None:
@@ -38,6 +40,25 @@ def build_dispatcher(owner_id: int) -> Dispatcher:
         policy = CommandPolicy.from_file(get_settings().policy_file)
         r = policy.check(cmd, remote=True)
         await message.answer(f"{r.decision.upper()} ({r.risk.name})\n" + "\n".join(r.reasons))
+
+    @dp.message(F.voice | F.audio)
+    async def voice(message: Message, bot: Bot) -> None:
+        media = message.voice or message.audio
+        limit = get_settings().voice_max_seconds
+        if media.duration and media.duration > limit:
+            await message.answer(f"Ovozli xabar juda uzun (maksimum {limit} soniya).")
+            return
+        await bot.send_chat_action(message.chat.id, "typing")
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "voice.ogg"
+            await bot.download(media, destination=path)
+            try:
+                t = await get_transcriber().transcribe(path)
+            except VoiceUnavailable as e:
+                await message.answer(f"Ovoz moduli ishlamayapti: {e}")
+                return
+        await message.answer(f"🎙 {t.text or '(eshitilmadi)'}")
+        await message.answer(await handle_text(t.text))
 
     @dp.message()
     async def fallback(message: Message) -> None:
