@@ -199,6 +199,7 @@ class JarvisApp(rumps.App):
                 self.ui.put(("reply", "Hech narsa eshitilmadi."))
                 return
             self.ui.put(("state", THINKING))
+            _save_last_audio(audio)
             t = get_transcriber().transcribe_sync(audio)
             if t.text:
                 self._answer(t.text, t.confidence)
@@ -262,6 +263,29 @@ class JarvisApp(rumps.App):
 
     def on_quit(self, _item) -> None:
         rumps.quit_application()
+
+
+LAST_AUDIO = Path.home() / "Library" / "Logs" / "jarvis" / "last.wav"
+
+
+def _save_last_audio(audio) -> None:
+    """Oxirgi buyruqni WAV qilib saqlaydi — noto'g'ri tanilsa, qayta tinglab tekshirish uchun."""
+    if not get_settings().save_last_audio:
+        return
+    import wave
+
+    import numpy as np
+
+    try:
+        LAST_AUDIO.parent.mkdir(parents=True, exist_ok=True)
+        pcm = (np.clip(audio, -1, 1) * 32767).astype("<i2").tobytes()
+        with wave.open(str(LAST_AUDIO), "wb") as w:
+            w.setnchannels(1)
+            w.setsampwidth(2)
+            w.setframerate(16_000)
+            w.writeframes(pcm)
+    except OSError:
+        log.warning("Oxirgi audioni saqlab bo'lmadi", exc_info=True)
 
 
 def _short(text: str, n: int = 60) -> str:

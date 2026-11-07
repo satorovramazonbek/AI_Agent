@@ -34,6 +34,14 @@ class Settings(BaseSettings):
     stt_model: str = "large-v3-turbo"
     stt_language: str = "uz"  # bo'sh qoldirilsa til avtomatik aniqlanadi
     voice_max_seconds: int = 300
+    # Whisper'ga namuna: o'zbek lotinida va shu so'zlarni kutib tinglaydi.
+    stt_prompt: str = (
+        "Safari'ni och. Telegram'ni yop. Ovozni ko'tar. Ovozni pasaytir. Batareya qancha? "
+        "Kompyuter holati. Ob-havo qanday? Soat necha? Musiqani qo'y. Eslatma yoz. "
+        "Obsidian'ga yoz. YouTube'da qidir. Taymer qo'y. Skrinshot ol."
+    )
+    # Oxirgi ovozli buyruq ~/Library/Logs/jarvis/last.wav ga saqlanadi (xatolarni tekshirish uchun).
+    save_last_audio: bool = True
 
     database_url: str = "postgresql://jarvis:jarvis@localhost:5432/jarvis"
 

@@ -40,9 +40,16 @@ LOW_CONFIDENCE = 0.5
 
 
 class Transcriber:
-    def __init__(self, model_name: str, language: str | None, compute_type: str = "int8"):
+    def __init__(
+        self,
+        model_name: str,
+        language: str | None,
+        compute_type: str = "int8",
+        prompt: str | None = None,
+    ):
         self.model_name = model_name
         self.language = language or None
+        self.prompt = prompt or None
         self.compute_type = compute_type
         self._model: Any = None
         self._lock = threading.Lock()
@@ -76,11 +83,14 @@ class Transcriber:
             model = self._load()
             if isinstance(audio, Path):
                 audio = str(audio)
+            lang = language or self.language
             segments, info = model.transcribe(
                 audio,
-                language=language or self.language,
+                language=lang,
                 beam_size=5,
                 vad_filter=True,  # jimlik va shovqinni tashlab yuboradi
+                # O'zbekcha namuna faqat uz/avtomatik tilda — rus/inglizga xalaqit bermasin.
+                initial_prompt=self.prompt if lang in (None, "uz") else None,
             )
             segs = list(segments)
         text = " ".join(s.text.strip() for s in segs).strip()
@@ -99,4 +109,4 @@ class Transcriber:
 @lru_cache
 def get_transcriber() -> Transcriber:
     s = get_settings()
-    return Transcriber(s.stt_model, s.stt_language)
+    return Transcriber(s.stt_model, s.stt_language, prompt=s.stt_prompt)

@@ -8,6 +8,7 @@ tinish belgilarisiz. Keyin tartib bo'yicha birinchi mos kelgan qoida bajariladi.
 from __future__ import annotations
 
 import re
+import unicodedata
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import datetime
@@ -29,11 +30,26 @@ _CYR = {
 _WAKE = re.compile(r"^(hey |hi |salom |эй )?(jarvis|djarvis|jarvys|jarviz|dzharvis)\b\s*")
 
 
+# Whisper o'zbekchani ba'zan turk/chex lotinida yozadi: «oč», «aç», «şu» → och, ach, shu
+_LATIN = {"č": "ch", "ç": "ch", "š": "sh", "ş": "sh", "ž": "j", "ğ": "g", "ı": "i"}
+# Tez-tez uchraydigan noto'g'ri eshitishlar (so'z boshida): «ach» → «och», «achir» → «ochir»
+_HEARD = [(re.compile(r"\bach"), "och"), (re.compile(r"\buchir"), "ochir")]
+
+
+def _plain_latin(t: str) -> str:
+    t = "".join(_LATIN.get(ch, ch) for ch in t)
+    t = unicodedata.normalize("NFKD", t)
+    return "".join(ch for ch in t if not unicodedata.combining(ch))  # ŏ, é, ü → o, e, u
+
+
 def normalize(text: str) -> str:
     t = "".join(_CYR.get(ch, ch) for ch in text.lower())
+    t = _plain_latin(t)
     t = re.sub(r"[ʻʼ‘’`´']", "", t)  # o'/g' va tutuq belgisi
     t = re.sub(r"[^\w\s:]", " ", t)
     t = re.sub(r"\s+", " ", t).strip()
+    for rx, repl in _HEARD:
+        t = rx.sub(repl, t)
     return _WAKE.sub("", t).strip()
 
 
@@ -114,6 +130,7 @@ _APP_NOISE = re.compile(r"\b(ilova|dastur|programma|prilojenie|app|papka|sayt|sa
 def _app_name(raw: str) -> str:
     """'safarini' → 'safari', 'telegram ilovasini' → 'telegram'."""
     name = _APP_NOISE.sub("", raw).strip()
+    name = re.sub(r"\s+(ni|na|ne|ny|n|ga)$", "", name)  # «telegram na» — alohida qo'shimcha
     return re.sub(r"(?<=\w)(ni|ga|ny)$", "", name).strip()
 
 

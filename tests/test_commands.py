@@ -413,3 +413,33 @@ def test_delete_last_note(tmp_path, monkeypatch):
     monkeypatch.setattr(macos, "notes_file", lambda: f)
     assert run(run_command("Oxirgi eslatmani o'chir")) == "O'chirildi: «[2] ikkinchi»."
     assert f.read_text().endswith("- [1] birinchi\n")
+
+
+# ---------- Haqiqiy noto'g'ri eshitishlar (JARVIS.app logidan) ----------
+
+
+@pytest.mark.parametrize(
+    "heard, app",
+    [
+        ("Safarin Ač", "Safari"),
+        ("Telegram na oč.", "Telegram"),
+        ("Safarini ach", "Safari"),
+        ("Safari'ni aç", "Safari"),
+        ("Telegramni achib ber", "Telegram"),
+    ],
+)
+def test_misheard_open_commands(heard, app, fake_mac):
+    calls, _ = fake_mac
+    assert rule_of(heard) == "app.open"
+    assert run(run_command(heard)) == f"{app} ochildi."
+    assert ("open", "-a", app) in calls
+
+
+def test_misheard_close_and_mute():
+    assert rule_of("Telegramni achir") == "app.quit"
+    assert rule_of("Ovozni achir") == "volume.mute"
+
+
+def test_normalize_turkic_latin():
+    assert normalize("Şu dasturni aç") == "shu dasturni och"
+    assert normalize("Ŏzbekcha") == "ozbekcha"
