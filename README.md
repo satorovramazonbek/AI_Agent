@@ -42,6 +42,17 @@ python -m jarvis.main         # port: JARVIS_PORT (standart 8010)
 > tool'lar (dastur ochish, AppleScript, mikrofon) keyingi bosqichlarda Mac'da native ishga tushiriladi.
 > Docker'da — API, Telegram bot va ma'lumotlar bazasi.
 
+## Fon xizmati (Mac yonganda o'zi ishga tushadi)
+
+```bash
+./scripts/install-launchd.sh     # o'rnatish va ishga tushirish (port 8020)
+tail -f ~/Library/Logs/jarvis/jarvis.log
+./scripts/uninstall-launchd.sh   # to'xtatish va o'chirish
+```
+
+Xizmat `.venv` va loyiha papkasidagi `.env` ni ishlatadi; `.env` o'zgarsa, o'rnatish skriptini
+qayta ishga tushiring.
+
 ## Ovoz
 
 Ovoz moduli Mac'da native ishlaydi (Docker'da o'rnatilmaydi):
