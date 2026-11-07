@@ -106,6 +106,14 @@ class JarvisApp(rumps.App):
         self.history_menu = rumps.MenuItem("🕘  Oxirgi buyruqlar")
         self.tts_item = rumps.MenuItem("🔈  Javobni ovozda aytish", callback=self.on_toggle_tts)
         self.tts_item.state = int(get_settings().tts_enabled)
+        self.voice = get_settings().tts_voice
+        self.voice_menu = rumps.MenuItem("🗣  Ovoz")
+        for key, label in (("uz", "O'zbekcha"), ("uz-qiz", "O'zbekcha (qiz)"),
+                           ("Yelda", "Turkcha (Yelda)")):  # fmt: skip
+            item = rumps.MenuItem(label, callback=self.on_voice)
+            item.voice_key = key
+            item.state = int(key == self.voice)
+            self.voice_menu.add(item)
         self.history: list[str] = []
         port = get_settings().app_port
         self.menu = [
@@ -117,6 +125,7 @@ class JarvisApp(rumps.App):
             self.history_menu,
             None,
             self.tts_item,
+            self.voice_menu,
             rumps.MenuItem("📝  Eslatmalarni ochish", callback=self.on_notes),
             rumps.MenuItem("❓  Nima qila olaman", callback=self.on_help),
             rumps.MenuItem(f"🌐  API: 127.0.0.1:{port}", callback=self.on_api),
@@ -157,8 +166,13 @@ class JarvisApp(rumps.App):
         if self.tts_item.state:
             from jarvis.voice.tts import speak
 
-            s = get_settings()
-            speak(text, voice=s.tts_voice, rate=s.tts_rate)
+            speak(text, voice=self.voice, rate=get_settings().tts_rate)
+
+    def on_voice(self, item) -> None:
+        self.voice = item.voice_key
+        for other in self.voice_menu.values():
+            other.state = int(other is item)
+        self._say("Salom! Men shu ovozda gapiraman.")
 
     def on_toggle_tts(self, item) -> None:
         item.state = 0 if item.state else 1

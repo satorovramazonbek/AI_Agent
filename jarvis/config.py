@@ -63,10 +63,11 @@ class Settings(BaseSettings):
     tg_api_hash: str = ""
     tg_session: Path = Path.home() / "Library" / "Application Support" / "JARVIS" / "telegram"
 
-    # Javobni ovoz chiqarib aytish (macOS «say»; o'zbekcha uchun eng tushunarli — turkcha Yelda).
+    # Javobni ovoz chiqarib aytish. "uz" — haqiqiy o'zbekcha ovoz (Meta MMS-TTS, lokal),
+    # "uz-qiz" — o'zbekcha qiz ovozi, "Yelda" — macOS turkcha ovozi.
     tts_enabled: bool = True
-    tts_voice: str = "Yelda"
-    tts_rate: int = 185
+    tts_voice: str = "uz"
+    tts_rate: int = 175
 
     # Saqlangan joylar («Pismadonchani uyi» → koordinata).
     places_file: Path = Path.home() / "Library" / "Application Support" / "JARVIS" / "places.json"

@@ -108,27 +108,192 @@ def to_cyrillic(text: str) -> str:
     return re.sub(r"[ʻʼ‘’'`\u0000]", "", t)
 
 
-VOICES = {"Yelda": to_turkish, "Aru": to_cyrillic}
+_UZ_CYR_PAIRS = [
+    ("o\u0000", "ў"), ("g\u0000", "ғ"), ("sh", "ш"), ("ch", "ч"), ("yo", "ё"), ("yu", "ю"),
+    ("ya", "я"), ("ye", "е"), ("ts", "тс"), ("e", "е"),
+    ("a", "а"), ("b", "б"), ("d", "д"), ("f", "ф"), ("g", "г"), ("h", "ҳ"), ("i", "и"),
+    ("j", "ж"), ("k", "к"), ("l", "л"), ("m", "м"), ("n", "н"), ("o", "о"), ("p", "п"),
+    ("q", "қ"), ("r", "р"), ("s", "с"), ("t", "т"), ("u", "у"), ("v", "в"), ("x", "х"),
+    ("y", "й"), ("z", "з"), ("w", "в"), ("c", "к"),
+]  # fmt: skip
+
+
+def uz_cyrillic(text: str) -> str:
+    """O'zbek lotini → o'zbek kirili (haqiqiy o'zbekcha ovoz modeli uchun).
+
+    o'→ў, g'→ғ, so'z boshidagi e→э, tutuq (ʼ)→ъ; kirilldagi matnga tegmaydi.
+    """
+    t = text.lower()
+    t = re.sub(r"([og])[\u02bb\u2018`']", lambda m: m.group(1) + "\u0000", t)  # o', g'
+    # «Telegram'ni», «Obsidian'ga» — qo'shimcha oldidagi ajratgich olib tashlanadi;
+    # qolganlari — tutuq belgisi: «ma'no» → маъно, «mas'uliyat» → масъулият
+    t = re.sub(r"[\u02bc\u2019'](?=(?:ni|ga|da|dan|ning|ka|qa|gacha|dagi|lar|larni|ning)\b)", "", t)
+    t = re.sub(r"[\u02bc\u2019']", "ъ", t)
+    t = re.sub(r"(?<![\w\u0000])e", "э", t)  # so'z boshidagi e
+    for a, b in _UZ_CYR_PAIRS:
+        t = t.replace(a, b)
+    return t.replace("\u0000", "")
+
+
+VOICES = {"Yelda": to_turkish, "Aru": to_cyrillic, "uz": uz_cyrillic}
 _lock = threading.Lock()
 _current: subprocess.Popen | None = None
+_generation = 0  # yangi gap kelsa, eskisi (hali sintez qilinayotgan bo'lsa ham) aytilmaydi
 
 
 def prepare(text: str, voice: str) -> str:
     return VOICES.get(voice, lambda s: s)(speakable(text))
 
 
-def speak(text: str, voice: str = "Yelda", rate: int = 185) -> None:
-    """Fonda aytadi; oldingi gap tugamagan bo'lsa — to'xtatib, yangisini aytadi."""
+def _play(cmd: list[str], gen: int, cleanup: str | None = None) -> None:
     global _current
-    if sys.platform != "darwin":
-        return
-    line = prepare(text, voice)
-    if not line:
+    proc = None
+    with _lock:
+        if gen == _generation:
+            if _current and _current.poll() is None:
+                _current.terminate()
+            try:
+                proc = _current = subprocess.Popen(cmd)
+            except OSError:
+                log.warning("ovoz ijro etilmadi: %s", cmd[0], exc_info=True)
+    if cleanup:  # vaqtinchalik wav — ijro tugagach (yoki umuman ijro etilmasa) o'chiriladi
+        import os
+
+        if proc is not None:
+            proc.wait()
+        try:
+            os.unlink(cleanup)
+        except OSError:
+            pass
+
+
+def _sweep_stale(tmpdir: str, older_than: float = 120) -> None:
+    """Jarayon to'satdan yopilganda qolib ketgan eski wav fayllarni o'chiradi."""
+    import os
+    import time
+    from pathlib import Path
+
+    for f in Path(tmpdir).glob("jarvis-*.wav"):
+        try:
+            if time.time() - f.stat().st_mtime > older_than:
+                os.unlink(f)
+        except OSError:
+            pass
+
+
+def _speak_worker(text: str, voice: str, rate: int, gen: int) -> None:
+    if voice in UZ_MODELS:
+        import tempfile
+
+        try:
+            wave = uzbek_voice(voice).synth(speakable(text))
+        except Exception:
+            log.warning("o'zbekcha ovoz ishlamadi — Yelda bilan aytaman", exc_info=True)
+            return _speak_worker(text, "Yelda", rate, gen)
+        if not len(wave):
+            return
+        _sweep_stale(tempfile.gettempdir())
+        path = tempfile.NamedTemporaryFile(prefix="jarvis-", suffix=".wav", delete=False).name
+        write_wav(path, wave)
+        _play(["afplay", "-r", f"{rate / 175:.2f}", path], gen, cleanup=path)
+    else:
+        line = prepare(text, voice)
+        if line:
+            _play(["say", "-v", voice, "-r", str(rate), line], gen)
+
+
+def speak(text: str, voice: str = "uz", rate: int = 185) -> None:
+    """Fonda aytadi (UI qotmaydi); oldingi gap tugamagan bo'lsa — to'xtatib, yangisini aytadi."""
+    global _generation
+    if sys.platform != "darwin" or not speakable(text):
         return
     with _lock:
-        if _current and _current.poll() is None:
-            _current.terminate()
-        try:
-            _current = subprocess.Popen(["say", "-v", voice, "-r", str(rate), line])
-        except OSError:
-            log.warning("say ishlamadi", exc_info=True)
+        _generation += 1
+        gen = _generation
+    threading.Thread(target=_speak_worker, args=(text, voice, rate, gen), daemon=True).start()
+
+
+# ---------- Haqiqiy o'zbekcha ovoz: MMS-TTS (VITS, ONNX) — lokal, internetsiz ----------
+
+UZ_MODELS = {
+    "uz": "davron112/mms-tts-uzb-cyrl-onnx",  # Meta MMS, o'zbekcha (erkak/neytral ovoz)
+    "uz-qiz": "davron112/mms-tts-uzbek-girl-cyrl-onnx",  # o'zbekcha qiz ovozi
+}
+SAMPLE_RATE = 16_000
+
+
+class UzbekVoice:
+    """MMS-TTS modeli: o'zbek kirill matni → 16 kHz ovoz to'lqini."""
+
+    def __init__(self, repo: str):
+        self.repo = repo
+        self._session = None
+        self._vocab: dict[str, int] = {}
+        self._pad = 0
+        self._lock = threading.Lock()
+
+    def _load(self):
+        if self._session is None:
+            import json
+            from pathlib import Path
+
+            import onnxruntime as ort
+            from huggingface_hub import snapshot_download
+
+            patterns = ["*.json", "onnx/model.onnx"]
+            try:
+                path = Path(snapshot_download(self.repo, allow_patterns=patterns,
+                                              local_files_only=True))  # fmt: skip
+            except Exception:
+                log.info("O'zbekcha ovoz modeli yuklanmoqda (~115 MB, bir marta): %s", self.repo)
+                path = Path(snapshot_download(self.repo, allow_patterns=patterns))
+            self._vocab = json.loads((path / "vocab.json").read_text(encoding="utf-8"))
+            pad = json.loads((path / "tokenizer_config.json").read_text()).get("pad_token", "|")
+            self._pad = self._vocab.get(pad, 0)
+            opts = ort.SessionOptions()
+            opts.intra_op_num_threads = 2  # qisqa gap — ko'p yadro shart emas (kam qizdiradi)
+            self._session = ort.InferenceSession(
+                str(path / "onnx" / "model.onnx"), opts, providers=["CPUExecutionProvider"]
+            )
+        return self._session
+
+    def ids(self, cyrillic: str) -> list[int]:
+        tokens = [self._vocab[ch] for ch in cyrillic.lower() if ch in self._vocab]
+        out = [self._pad] * (2 * len(tokens) + 1)  # add_blank: har belgi orasiga pad
+        out[1::2] = tokens
+        return out
+
+    def synth(self, text: str):
+        import numpy as np
+
+        with self._lock:
+            session = self._load()
+            ids = self.ids(uz_cyrillic(text))
+            if len(ids) <= 1:
+                return np.zeros(0, dtype="float32")
+            arr = np.array([ids], dtype="int64")
+            feed = {"input_ids": arr, "attention_mask": np.ones_like(arr)}
+            wave = session.run(["waveform"], feed)
+        return wave[0][0].astype("float32")
+
+
+_uz_voices: dict[str, UzbekVoice] = {}
+
+
+def uzbek_voice(name: str) -> UzbekVoice:
+    if name not in _uz_voices:
+        _uz_voices[name] = UzbekVoice(UZ_MODELS[name])
+    return _uz_voices[name]
+
+
+def write_wav(path, wave, rate: int = SAMPLE_RATE) -> None:
+    import wave as wavmod
+
+    import numpy as np
+
+    pcm = (np.clip(wave, -1, 1) * 32767).astype("<i2").tobytes()
+    with wavmod.open(str(path), "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(rate)
+        w.writeframes(pcm)
