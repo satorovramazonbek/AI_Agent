@@ -123,4 +123,6 @@ def get_transcriber() -> Transcriber:
     s = get_settings()
     from jarvis.tools.contacts import hotwords
 
+    if not s.stt_use_hints:
+        return Transcriber(s.stt_model, s.stt_language)
     return Transcriber(s.stt_model, s.stt_language, prompt=s.stt_prompt, hotwords=hotwords)

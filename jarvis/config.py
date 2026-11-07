@@ -29,12 +29,15 @@ class Settings(BaseSettings):
     model: str = "claude-opus-5-5"
     model_effort: str = "medium"  # low | medium | high | xhigh | max
 
-    # Ovoz (STT): lokal Whisper. Model birinchi ishlatilganda yuklab olinadi.
-    # O'zbek tili uchun kichik modellar sust; large-v3-turbo — sifat va tezlik muvozanati.
-    stt_model: str = "large-v3-turbo"
+    # Ovoz (STT): lokal Whisper. Standart — o'zbek tiliga o'rgatilgan large-v3-turbo
+    # (hostmepanda/whisper-large-v3-turbo-uzbek-ct2, MIT): haqiqiy yozuvda «oktanga salon de bibor»
+    # o'rniga «o'ktamga salom deb yubor» deb to'g'ri eshitdi. Asl model: "large-v3-turbo".
+    stt_model: str = "hostmepanda/whisper-large-v3-turbo-uzbek-ct2"
     stt_language: str = "uz"  # bo'sh qoldirilsa til avtomatik aniqlanadi
     voice_max_seconds: int = 300
-    # Whisper'ga namuna: o'zbek lotinida va shu so'zlarni kutib tinglaydi.
+    # Whisper'ga namuna va tanish ismlar (hotwords). O'zbekcha model bularsiz yaxshiroq —
+    # ular bilan bo'sh natija qaytaradi; asl "large-v3-turbo" da yoqish foydali.
+    stt_use_hints: bool = False
     stt_prompt: str = (
         "Safari'ni och. Telegram'ni yop. Ovozni ko'tar. Ovozni pasaytir. Batareya qancha? "
         "Kompyuter holati. Ob-havo qanday? Soat necha? Musiqani qo'y. Eslatma yoz. "

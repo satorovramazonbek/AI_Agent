@@ -76,3 +76,18 @@ def test_voice_sample_end_to_end(monkeypatch):
         return await run_command("Ha", "s")
 
     assert asyncio.run(flow()) == "✅ Yuborildi → O'ktam Rahimov: «salom»"
+
+
+def test_curly_apostrophe_is_normalized_for_search(monkeypatch):
+    seen = []
+
+    async def draft(name, message):
+        seen.append(name)
+        return telegram_ui.Draft(chat_title="O'ktam")
+
+    monkeypatch.setattr(telegram_ui, "open_chat_and_draft", draft)
+    monkeypatch.setattr(commands, "_telegram_backend", lambda: "ui")
+    commands.PENDING.clear()
+    # o'zbekcha model shunday yozadi (jingalak apostrof)
+    asyncio.run(run_command("Telegramdan o’ktamga salom deb yubor.", "s"))
+    assert seen == ["o'ktam"]

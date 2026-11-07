@@ -86,8 +86,10 @@ jarvis-voice --language ru      # boshqa til
 curl -F file=@ovoz.ogg http://127.0.0.1:8020/voice/transcribe
 ```
 
-- Model: `JARVIS_STT_MODEL` (standart `large-v3-turbo`, ~1.6 GB, birinchi ishga tushirishda yuklanadi).
-  Kuchsiz internet yoki tezlik kerak bo'lsa — `small`, lekin o'zbek tilida xato ko'payadi.
+- Model: `JARVIS_STT_MODEL` — standart **o'zbek tiliga o'rgatilgan** `large-v3-turbo`
+  (`hostmepanda/whisper-large-v3-turbo-uzbek-ct2`, MIT, ~1.6 GB, bir marta yuklanadi).
+  Haqiqiy yozuvda asl model «oktanga salon de bibor», o'zbekchasi «o'ktamga salom deb yubor»
+  deb eshitdi. Asl model kerak bo'lsa: `large-v3-turbo` (+ `JARVIS_STT_USE_HINTS=true`).
 - Til: `JARVIS_STT_LANGUAGE` (standart `uz`; bo'sh qoldirilsa avtomatik aniqlanadi).
 - Birinchi `jarvis-voice` ishga tushganda macOS Terminal'ga mikrofon ruxsatini so'raydi.
 - Tanilgan matn avval bepul buyruqlarga solishtiriladi (pastdagi jadval); mos kelmasa va

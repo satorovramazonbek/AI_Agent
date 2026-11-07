@@ -308,7 +308,8 @@ async def _telegram_send_ui(found) -> str:
     spoken, msg = found
     msg = fix_message(msg)
     known = await asyncio.to_thread(contacts.best_match, spoken)
-    query = known or spoken
+    # «o’ktam» / «oʻktam» → «o'ktam»: Telegram qidiruvi oddiy apostrofni kutadi
+    query = known or re.sub(r"[\u02bb\u02bc\u2018\u2019`´]", "'", spoken)
     try:
         draft = await telegram_ui.open_chat_and_draft(query, msg)
     except telegram_ui.TelegramUIError as e:
