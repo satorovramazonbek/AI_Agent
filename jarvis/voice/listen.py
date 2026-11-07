@@ -11,8 +11,10 @@ import asyncio
 import logging
 import sys
 
+from jarvis.config import get_settings
 from jarvis.voice.intents import handle_text
 from jarvis.voice.stt import Transcriber, VoiceUnavailable, get_transcriber
+from jarvis.voice.tts import speak
 
 SAMPLE_RATE = 16_000  # Whisper kutadigan chastota
 
@@ -71,7 +73,11 @@ async def _listen_loop(transcriber: Transcriber, language: str | None) -> None:
         t = await transcriber.transcribe(audio, language)
         mark = " (?) — aniq eshitmadim" if t.unsure else ""
         print(f"📝 Siz: {t.text or '(eshitilmadi)'}  [{t.language}, {t.confidence:.0%}]{mark}")
-        print(f"🤖 JARVIS: {await handle_text(t.text, 'mic')}")
+        reply = await handle_text(t.text, "mic")
+        print(f"🤖 JARVIS: {reply}")
+        s = get_settings()
+        if s.tts_enabled:
+            speak(reply, voice=s.tts_voice, rate=s.tts_rate)
 
 
 if __name__ == "__main__":

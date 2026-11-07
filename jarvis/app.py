@@ -104,6 +104,8 @@ class JarvisApp(rumps.App):
         self.heard = rumps.MenuItem("Siz: —")
         self.reply = rumps.MenuItem("JARVIS: —")
         self.history_menu = rumps.MenuItem("🕘  Oxirgi buyruqlar")
+        self.tts_item = rumps.MenuItem("🔈  Javobni ovozda aytish", callback=self.on_toggle_tts)
+        self.tts_item.state = int(get_settings().tts_enabled)
         self.history: list[str] = []
         port = get_settings().app_port
         self.menu = [
@@ -114,6 +116,7 @@ class JarvisApp(rumps.App):
             self.reply,
             self.history_menu,
             None,
+            self.tts_item,
             rumps.MenuItem("📝  Eslatmalarni ochish", callback=self.on_notes),
             rumps.MenuItem("❓  Nima qila olaman", callback=self.on_help),
             rumps.MenuItem(f"🌐  API: 127.0.0.1:{port}", callback=self.on_api),
@@ -148,6 +151,19 @@ class JarvisApp(rumps.App):
             elif kind == "reply":
                 self.reply.title = f"JARVIS: {_short(value)}"
                 notify("JARVIS", value)
+                self._say(value)
+
+    def _say(self, text: str) -> None:
+        if self.tts_item.state:
+            from jarvis.voice.tts import speak
+
+            s = get_settings()
+            speak(text, voice=s.tts_voice, rate=s.tts_rate)
+
+    def on_toggle_tts(self, item) -> None:
+        item.state = 0 if item.state else 1
+        if item.state:
+            self._say("Javoblarni ovozda aytaman.")
 
     def _show_result(self, heard: str, reply: str, confidence: float | None) -> None:
         from jarvis.voice.stt import LOW_CONFIDENCE
@@ -159,6 +175,7 @@ class JarvisApp(rumps.App):
         # Sarlavhada — eshitilgan gap (to'g'ri tanildimi, darrov ko'rinadi), matnda — javob.
         title = f"🎙 «{_short(heard, 70)}»" + (" (?)" if unsure else "")
         notify(title, reply)
+        self._say(reply)
         line = f"{datetime.now():%H:%M}  «{_short(heard, 40)}» → {_short(reply, 40)}"
         self.history.insert(0, line)
         del self.history[10:]
