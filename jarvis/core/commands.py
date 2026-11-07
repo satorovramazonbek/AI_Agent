@@ -7,14 +7,17 @@ tinish belgilarisiz. Keyin tartib bo'yicha birinchi mos kelgan qoida bajariladi.
 
 from __future__ import annotations
 
+import contextvars
 import re
+import time
 import unicodedata
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
-from jarvis.tools import macos, web
+from jarvis.config import get_settings
+from jarvis.tools import macos, places, telegram_ui, telegram_user, web
 from jarvis.tools.system import NoArgs, system_status
 
 # ---------- Normallashtirish ----------
@@ -37,9 +40,13 @@ _HEARD = [(re.compile(r"\bach"), "och"), (re.compile(r"\buchir"), "ochir")]
 
 
 def _plain_latin(t: str) -> str:
-    t = "".join(_LATIN.get(ch, ch) for ch in t)
-    t = unicodedata.normalize("NFKD", t)
-    return "".join(ch for ch in t if not unicodedata.combining(ch))  # ŏ, é, ü → o, e, u
+    """Lotin harflaridagi belgilarni olib tashlaydi (ŏ, é, ü → o, e, u); kirillga tegmaydi."""
+    out = []
+    for ch in t:
+        ch = _LATIN.get(ch, ch)
+        base = unicodedata.normalize("NFKD", ch)[0] if len(ch) == 1 else ch
+        out.append(base if base.isascii() and not ch.isascii() else ch)
+    return "".join(out)
 
 
 def normalize(text: str) -> str:
@@ -72,7 +79,9 @@ HELP = (
     "🌙 «Tungi rejimni yoq / o'chir», «Wi-Fi'ni o'chir / yoq»\n"
     "📸 «Skrinshot ol», «Ekranni qulfla», «Kompyuterni uxlat»\n"
     "📝 «Eslatma: non olish», «Eslatmalarimni o'qi», «Oxirgi eslatmani o'chir»\n"
-    "📓 «Obsidianni och va yozib qo'y: ...»"
+    "📓 «Obsidianni och va yozib qo'y: ...»\n"
+    "✉️ «Telegramni ochib Aliga salom deb yubor» (yuborishdan oldin so'rayman)\n"
+    "📍 «Turgan joyimni Pismadonchani uyi deb saqla», «Pismadonchani uyiga yo'l ko'rsat»"
 )
 
 
@@ -201,6 +210,102 @@ async def _obsidian(m: re.Match) -> str:
         return "Nima yozay? Masalan: «Obsidian'ga yoz: ertaga soat 9 da uchrashuv»."
     await macos.obsidian_write(macos.NoteArgs(text=text))
     return f"Obsidian'ga yozdim va ochdim: «{text}»."
+
+
+# ---------- Telegram: «Aliga salom deb yubor» ----------
+
+_TG = r"(?:telegram|telegramm|телеграм)\S*"
+_DAT = r"(?:ga|ka|qa|га|ка|қа)"
+_NAME = r"(?P<name>[^\s,:]+?(?:\s+[^\s,:]+?)?)" + _DAT + r"\b"
+_SEND = (r"(?:yoz|yubor|jo\W?nat|ayt|ёз|юбор|жўнат|айт)\w*"
+         r"(?:\s+(?:ber|qo\W?y|yubor|jo\W?nat|бер|қўй|юбор)\w*)?")  # fmt: skip
+_DEB = r"(?:deb|deya|degin|деб|дея)"
+_TG_PRE = (_WAKE_RAW + rf"(?:{_TG}\s*(?:ni\s+|ни\s+)?(?:och\w*|оч\w*|orqali|орқали)?"
+           r"\s*(?:va\s+|ва\s+|,\s*)?)?")  # fmt: skip
+_TELEGRAM = [
+    # «Telegramni ochib Aliga salom deb yubor», «Sardorga ertaga kelaman deb yoz»
+    re.compile(_TG_PRE + _NAME + rf"\s+(?:{_TG}\s+)?(?:xabar\s+)?(?P<msg>.+?)\s*,?\s+{_DEB}\s+"
+               rf"{_SEND}\s*[.!]?$", re.IGNORECASE | re.DOTALL),
+    # «Telegramda Aliga yoz: salom» (ikki nuqta yoki «telegram» so'zi bo'lsa)
+    re.compile(_TG_PRE + _NAME + rf"\s+(?:{_TG}\s+)?{_SEND}\s*(?P<colon>[:,\-])?\s*(?P<msg>.+)$",
+               re.IGNORECASE | re.DOTALL),
+    # «Напиши Али в телеграм привет», «Отправь Сардору сообщение: завтра приду»
+    re.compile(rf"^(?:напиши|отправь|скажи)\s+(?:в\s+{_TG}\s+)?(?P<name>\S+)\s+"
+               rf"(?:в\s+{_TG}\s+)?(?:сообщение\s*)?[:,\-]?\s*(?P<msg>.+)$",
+               re.IGNORECASE | re.DOTALL),
+]  # fmt: skip
+
+
+def _telegram_match(text: str):
+    t = _plain_latin(text.strip())
+    for i, rx in enumerate(_TELEGRAM):
+        m = rx.match(t)
+        if not m:
+            continue
+        # 2-shakl xavfliroq («Aliga yoz salom»): telegram so'zi yoki ikki nuqta bo'lishi shart
+        if i == 1 and not (m.group("colon") or re.search(_TG, t, re.IGNORECASE)):
+            continue
+        name, msg = m.group("name").strip(" '’ʻ"), m.group("msg").strip(" «»\"'.")
+        if name and msg and not re.fullmatch(f"{_TG}|{_OBS}", name, re.IGNORECASE):
+            return name, msg
+    return None
+
+
+def _telegram_backend() -> str:
+    """«api» — my.telegram.org kalitlari sozlangan bo'lsa; aks holda ekran orqali («ui»)."""
+    s = get_settings()
+    return "api" if s.tg_api_id and s.tg_api_hash else "ui"
+
+
+def _looks_like(spoken: str, title: str) -> bool:
+    a, b = telegram_user.name_key(spoken), telegram_user.name_key(title)
+    return bool(a and b) and (a in b or b in a or a.split()[0] in b.split())
+
+
+async def _telegram_send(found) -> str:
+    if _telegram_backend() == "ui":
+        return await _telegram_send_ui(found)
+    return await _telegram_send_api(found)
+
+
+async def _telegram_send_ui(found) -> str:
+    spoken, msg = found
+    try:
+        draft = await telegram_ui.open_chat_and_draft(spoken, msg)
+    except telegram_ui.TelegramUIError as e:
+        return str(e)
+    chat = draft.chat_title or "?"
+    warn = ""
+    if draft.chat_title and not _looks_like(spoken, draft.chat_title):
+        warn = f"\n⚠️ Diqqat: siz «{spoken}» dedingiz, lekin «{chat}» chati ochildi!"
+
+    async def do_send() -> str:
+        await telegram_ui.press_send()
+        return f"✅ Yuborildi → {chat}: «{msg}»"
+
+    return ask_confirmation(
+        f"Telegram'da «{chat}» chati ochildi, xabar yozib qo'yildi:\n«{msg}»{warn}\n"
+        "Ekranga qarang — to'g'ri odammi? Yuboraymi?",
+        do_send,
+        on_cancel=telegram_ui.clear_draft,
+    )
+
+
+async def _telegram_send_api(found) -> str:
+    spoken, msg = found
+    contact, candidates = await telegram_user.find_contact(spoken)
+    if contact is None:
+        if not candidates:
+            return f"Telegram'da «{spoken}» degan kontakt topilmadi."
+        names = ", ".join(c.name for c in candidates)
+        return f"«{spoken}» — bir nechta odam bor: {names}. Ism-familiyasi bilan ayting."
+
+    async def do_send() -> str:
+        await telegram_user.send(contact, msg)
+        return f"✅ Yuborildi → {contact.name}: «{msg}»"
+
+    who = contact.name + (f" (@{contact.username})" if contact.username else "")
+    return ask_confirmation(f"Telegram → {who}:\n«{msg}»\nYuboraymi?", do_send)
 
 
 async def _note_list(_m) -> str:
@@ -491,6 +596,12 @@ def match(text: str) -> tuple[Rule, object] | None:
     note = _NOTE_ADD.match(text.strip())
     if note:
         return Rule("notes.add", _NOTE_ADD, _note_add), note
+    place = _place_match(text)
+    if place:
+        return Rule(f"place.{place[0]}", re.compile(""), _place_handler), place
+    tg = _telegram_match(text)
+    if tg:
+        return Rule("telegram.send", re.compile(""), _telegram_send), tg
     norm = normalize(text)
     for rule in RULES:
         m = rule.pattern.search(norm)
@@ -499,15 +610,254 @@ def match(text: str) -> tuple[Rule, object] | None:
     return None
 
 
-async def run_command(text: str) -> str | None:
+# ---------- Interfeys uchun qo'shimchalar (Telegram: lokatsiya pini, tugmalar) ----------
+
+EXTRAS: dict[str, list[tuple]] = {}
+
+
+def _extra(*item) -> None:
+    EXTRAS.setdefault(_session.get(), []).append(item)
+
+
+def pop_extras(session_id: str) -> list[tuple]:
+    """Javobga qo'shimcha: ("location", lat, lon, nom), ("request_location",), ("done",)."""
+    return EXTRAS.pop(session_id, [])
+
+
+# ---------- Saqlangan joylar ----------
+
+LOCATION_TTL = 10 * 60
+LAST_LOCATION: dict[str, tuple[float, float, float]] = {}  # sessiya → (lat, lon, vaqt)
+AWAIT_LOCATION: dict[str, tuple[str, float]] = {}  # sessiya → (nom, muddat): joy nomi bor
+AWAIT_NAME: dict[str, float] = {}  # sessiya → muddat: lokatsiya bor, nom kutilmoqda
+
+_HERE = (r"(?:turgan\s+joy\w*|men\s+turgan\s+joy\w*|hozirgi\s+joy\w*|joylashuv\w*|lokatsiya\w*"
+         r"|lokatsiyam\w*|manzilim\w*|bu\s+(?:joy|yer)\w*|shu\s+(?:joy|yer)\w*)")  # fmt: skip
+_SAVE_VERB = r"(?:saqla\w*|eslab\s+qol\w*|yozib\s+qo\W?y\w*)(?:\s+qo\W?y\w*)?"
+_PLACE_SAVE = [
+    # «Turgan joyimni Pismadonchani uyi deb saqla», «turgan joyim pismadonchani uyi saqlab qo'y»
+    re.compile(_WAKE_RAW + _HERE + r"\s+(?P<name>.+?)\s+(?:deb\s+|deya\s+|qilib\s+)?"
+               + _SAVE_VERB + r"\s*[.!]?$", re.IGNORECASE),
+    # «Сохрани это место как дом Али»
+    re.compile(r"^(?:сохрани|запомни)\s+(?:это\s+место|мо[её]\s+местоположение|где\s+я)"
+               r"\s+(?:как\s+)?(?P<name>.+?)\s*[.!]?$", re.IGNORECASE),
+]
+_PLACE_GO = re.compile(
+    _WAKE_RAW + r"(?P<name>.+?)(?:\s*(?:ga|ka|qa))?\s+(?P<how>qanday\s+bora\w*|qanday\s+bors\w*"
+    r"|yol\w*(?:\s+(?:korsat|ber|och)\w*)?|marshrut\w*|navigator\w*|qayerda\w*|qayer\w*"
+    r"|lokatsiya\w*(?:\s+(?:yubor|ber|korsat)\w*)?|manzil\w*(?:\s+(?:yubor|ber|korsat)\w*)?)"
+    r"\s*[?.!]?$",
+    re.IGNORECASE,
+)
+_PLACE_LIST = re.compile(r"\b(saqlangan\s+joylar\w*|joylarim\w*|mening\s+joylarim|"
+                         r"joylar\s+royxat\w*|moi mesta|saved places)\b")  # fmt: skip
+_PLACE_DELETE = re.compile(r"^(?P<name>.+?)\s+(?:degan\s+)?(?:joy\w*\s+|ni\s+joylardan\s+)"
+                           r"(?:ochir|uchir)\w*$")  # fmt: skip
+
+
+def _place_text(text: str) -> str:
+    t = _plain_latin(text.strip())
+    return re.sub(r"[\u02bb\u02bc\u2018\u2019`´']", "", t)
+
+
+def _clean_place_name(name: str) -> str:
+    name = re.sub(r"\s+(ni|ga)$", "", name.strip(" ,.!?«»\"'"))
+    return name[:1].upper() + name[1:] if name else name
+
+
+def _place_match(text: str):
+    t = _place_text(text)
+    for rx in _PLACE_SAVE:
+        m = rx.match(t)
+        if m:
+            return "save", _clean_place_name(m.group("name"))
+    m = _PLACE_GO.match(t)
+    if m:
+        name = _clean_place_name(m.group("name"))
+        explicit = not m.group("how").lower().startswith("qayer")
+        # «… qayerda» faqat shunday joy saqlangan bo'lsa (aks holda boshqa savol bo'lishi mumkin)
+        if places.find(name) or (explicit and len(name.split()) <= 4):
+            return "go", name
+    norm = normalize(text)
+    if _PLACE_LIST.search(norm):
+        return "list", None
+    m = _PLACE_DELETE.match(norm)
+    if m and places.find(m.group("name")):
+        return "delete", m.group("name")
+    return None
+
+
+def _saved_reply(place, existed: bool) -> str:
+    _extra("done")
+    verb = "yangilandi" if existed else "saqlandi"
+    return f"📍 «{place.name}» {verb}.\nKeyin «{place.name}ga yo'l ko'rsat» desangiz bo'ldi."
+
+
+def _save_place(name: str, lat: float, lon: float) -> str:
+    place, existed = places.save(name, lat, lon)
+    return _saved_reply(place, existed)
+
+
+def _recent_location(session_id: str):
+    loc = LAST_LOCATION.get(session_id)
+    if loc and time.monotonic() - loc[2] < LOCATION_TTL:
+        return loc[0], loc[1]
+    return None
+
+
+async def _place_handler(found) -> str:
+    action, name = found
+    session_id = _session.get()
+    if action == "save":
+        loc = _recent_location(session_id)
+        if loc:
+            AWAIT_NAME.pop(session_id, None)
+            return _save_place(name, *loc)
+        AWAIT_LOCATION[session_id] = (name, time.monotonic() + LOCATION_TTL)
+        if session_id.startswith("tg:"):
+            _extra("request_location")
+            return f"«{name}» uchun joylashuvingizni yuboring — pastdagi 📍 tugmani bosing."
+        return (
+            f"«{name}» uchun joylashuv kerak. Mac joylashuvi aniq emas — telefondan JARVIS "
+            "botiga lokatsiya yuboring (📎 → Location), 10 daqiqa ichida shu nom bilan saqlayman."
+        )
+    if action == "go":
+        place = places.find(name)
+        if place is None:
+            return f"«{name}» degan joy saqlanmagan. Saqlanganlar: «Saqlangan joylar» deb so'rang."
+        if session_id.startswith("tg:"):
+            _extra("location", place.lat, place.lon, place.name)
+            return f"🧭 «{place.name}» — navigatsiya ilovasini tanlang va «Start» ni bosing."
+        await macos.open_url(macos.OpenUrlArgs(url=place.google))
+        return f"🧭 «{place.name}» xaritada ochildi (Google Maps)."
+    if action == "list":
+        saved = sorted(places.load().values(), key=lambda p: p.name.lower())
+        if not saved:
+            return "Hali saqlangan joy yo'q. «Turgan joyimni … deb saqla» deng."
+        return "📍 Saqlangan joylar:\n" + "\n".join(f"• {p.name}" for p in saved)
+    if action == "delete":
+        place = places.delete(name)
+        return f"«{place.name}» o'chirildi." if place else f"«{name}» topilmadi."
+    return "?"
+
+
+def on_location(session_id: str, lat: float, lon: float) -> str:
+    """Telegram'dan lokatsiya keldi: kutilayotgan nom bo'lsa saqlaydi, bo'lmasa nom so'raydi."""
+    now = time.monotonic()
+    LAST_LOCATION[session_id] = (lat, lon, now)
+    waiting = [(sid, v) for sid, v in AWAIT_LOCATION.items() if v[1] > now]
+    # avval shu chatdagi so'rov, keyin boshqa interfeysdagi (masalan Mac'da aytilgan) so'rov
+    mine = [w for w in waiting if w[0] == session_id] or sorted(waiting, key=lambda w: -w[1][1])
+    token = _session.set(session_id)
+    try:
+        if mine:
+            sid, (name, _) = mine[0]
+            AWAIT_LOCATION.pop(sid, None)
+            return _save_place(name, lat, lon)
+        AWAIT_NAME[session_id] = now + LOCATION_TTL
+        return "📍 Joylashuv olindi. Qanday nom bilan saqlay? (masalan: «Pismadonchani uyi»)"
+    finally:
+        _session.reset(token)
+
+
+# ---------- Tasdiqlash (tashqariga ketadigan amallar uchun) ----------
+
+
+@dataclass
+class Pending:
+    question: str  # foydalanuvchiga ko'rsatiladigan savol
+    action: Callable[[], Awaitable[str]]
+    expires: float
+    on_cancel: Callable[[], Awaitable[None]] | None = None
+
+
+PENDING: dict[str, Pending] = {}
+CONFIRM_SECONDS = 90
+_session: contextvars.ContextVar[str] = contextvars.ContextVar("session", default="default")
+_YES = re.compile(r"^(ha|xa|haa|xop|hop|ha yubor|yubor|jonat|tasdiqla\w*|albatta|mayli|ok|okey|"
+                  r"yes|da|davay|otprav\w*)\b")  # fmt: skip
+_NO = re.compile(r"^(yoq|kerak emas|bekor\w*|toxta\w*|net|no|otmena|cancel)\b")
+
+
+def ask_confirmation(
+    question: str,
+    action: Callable[[], Awaitable[str]],
+    on_cancel: Callable[[], Awaitable[None]] | None = None,
+) -> str:
+    """Amalni darhol bajarmaydi: savol qaytaradi, «ha» kelsa keyin bajaradi."""
+    PENDING[_session.get()] = Pending(
+        question, action, time.monotonic() + CONFIRM_SECONDS, on_cancel
+    )
+    return f"{question}\n«Ha» desangiz yuboraman, «yo'q» — bekor qilaman."
+
+
+def pending(session_id: str) -> Pending | None:
+    p = PENDING.get(session_id)
+    if p and time.monotonic() > p.expires:
+        PENDING.pop(session_id, None)
+        return None
+    return p
+
+
+async def confirm(session_id: str) -> str:
+    p = PENDING.pop(session_id, None)
+    if not p or time.monotonic() > p.expires:
+        return "Tasdiqlanadigan amal yo'q (vaqti o'tgan bo'lishi mumkin)."
+    try:
+        return await p.action()
+    except Exception as e:
+        return f"Bajarib bo'lmadi: {e}"
+
+
+async def cancel(session_id: str) -> str:
+    p = PENDING.pop(session_id, None)
+    if not p:
+        return "Bekor qiladigan amal yo'q."
+    if p.on_cancel:
+        try:
+            await p.on_cancel()
+        except Exception:  # bekor qilish xatosi asosiy javobni buzmasin
+            pass
+    return "Bekor qilindi."
+
+
+async def run_command(text: str, session_id: str = "default") -> str | None:
     """Matnni bepul buyruq sifatida bajaradi; tanilmasa None qaytaradi."""
+    if pending(session_id):
+        norm = normalize(text)
+        if _YES.match(norm):
+            return await confirm(session_id)
+        if _NO.match(norm):
+            return await cancel(session_id)
+        PENDING.pop(session_id, None)  # boshqa gap — eski so'rov bekor, yangisi bajariladi
+    elif re.fullmatch(r"(ha|xa|yoq|ok|yes|no|da|net)", normalize(text)):
+        return "Hozir tasdiqlanadigan narsa yo'q."
+    if AWAIT_NAME.get(session_id, 0) > time.monotonic() and match(text) is None:
+        # lokatsiya yuborilgan, endi faqat nomi aytildi: «Pismadonchani uyi»
+        # (buyruqqa o'xshagan gap — masalan «… deb saqla» — oddiy buyruq sifatida bajariladi)
+        AWAIT_NAME.pop(session_id, None)
+        if _NO.match(normalize(text)):
+            return "Bekor qilindi — joy saqlanmadi."
+        loc = _recent_location(session_id)
+        if loc:
+            name = re.sub(rf"\s+(?:deb\s+)?{_SAVE_VERB}\s*$", "", _place_text(text), flags=re.I)
+            token = _session.set(session_id)
+            try:
+                return _save_place(_clean_place_name(name), *loc)
+            finally:
+                _session.reset(token)
     found = match(text)
     if not found:
         return None
     rule, m = found
+    token = _session.set(session_id)
     try:
         return await rule.handler(m)
     except macos.MacOnly:
         return "Bu buyruq faqat Mac'da ishlaydi (Docker ichida emas)."
+    except telegram_user.TelegramNotReady as e:
+        return str(e)
     except Exception as e:  # macOS buyrug'i xato bersa, foydalanuvchiga aytamiz
         return f"Bajarib bo'lmadi: {e}"
+    finally:
+        _session.reset(token)

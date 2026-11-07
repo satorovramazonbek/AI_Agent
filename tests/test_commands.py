@@ -6,6 +6,7 @@ import pytest
 from jarvis.core import commands
 from jarvis.core.commands import match, normalize, run_command
 from jarvis.tools import macos
+from tests.conftest import ORIG
 
 APPS = {
     "safari": "Safari",
@@ -193,7 +194,10 @@ def test_notes_roundtrip(tmp_path, monkeypatch):
 
 
 def test_not_on_mac(monkeypatch):
-    monkeypatch.setattr(macos.sys, "platform", "linux")
+    async def linux_run(*args, timeout=15):
+        raise macos.MacOnly("bu buyruq faqat Mac'da ishlaydi")
+
+    monkeypatch.setattr(macos, "_run", linux_run)
     assert "faqat Mac'da" in run(run_command("Batareya qancha"))
 
 
@@ -235,6 +239,7 @@ def test_obsidian_write_to_vault(tmp_path, monkeypatch, fake_mac):
     vault = tmp_path / "Core"
     vault.mkdir()
     monkeypatch.setattr(macos, "obsidian_vault", lambda: vault)
+    monkeypatch.setattr(macos, "notes_file", ORIG["notes_file"])
     monkeypatch.setattr(
         macos, "get_settings", lambda: type("S", (), {"notes_file": None, "obsidian_vault": None})
     )
@@ -264,7 +269,7 @@ def test_vault_autodetect(tmp_path, monkeypatch):
     cfg.write_text(json.dumps({"vaults": vaults}))
     monkeypatch.setattr(macos, "OBSIDIAN_CONFIG", cfg)
     monkeypatch.setattr(macos, "get_settings", lambda: type("S", (), {"obsidian_vault": None}))
-    assert macos.obsidian_vault() == v2  # ochiq va mavjud vault
+    assert ORIG["obsidian_vault"]() == v2  # ochiq va mavjud vault
 
 
 def test_uri_outside_vault_is_none(tmp_path):

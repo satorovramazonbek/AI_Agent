@@ -116,6 +116,26 @@ bo'lmasa — `~/Documents/JARVIS/eslatmalar.md`. Boshqa fayl uchun — `JARVIS_N
 
 Dastur yopishda macOS bir marta «boshqarishga ruxsat» so'raydi.
 
+## Telegram'ga xabar (API'siz)
+
+«Telegramni ochib Aliga salom deb yubor» → JARVIS Telegram'ni ochadi, qidiruvga ismni yozadi,
+birinchi natijani ochadi va xabarni **qoralama** qilib yozadi. Ochilgan chat nomi va xabar
+ko'rsatiladi; «ha» (yoki tugma) bosilgandagina Enter bosiladi. Ochilgan chat ism bilan mos
+kelmasa — ogohlantiradi. Boshqaruv paytida ekranda «🤖 JARVIS boshqaryapti» yozuvi va to'q
+sariq hoshiya turadi.
+
+Bir martalik: System Settings → Privacy & Security → **Accessibility** → JARVIS ni yoqing.
+Ixtiyoriy (ekransiz): `.env` ga my.telegram.org dan `JARVIS_TG_API_ID/HASH`, keyin
+`.venv/bin/jarvis-telegram-login`.
+
+## Saqlangan joylar (telefondan)
+
+Telegram bot orqali (BotFather tokeni — bepul): telefonda «Turgan joyimni Pismadonchani uyi deb
+saqla» deng (yoki ovozli xabar) → «📍 Joylashuvni yuborish» tugmasini bosing → saqlanadi.
+Yoki avval lokatsiya yuboring, keyin nomini ayting. «Pismadonchani uyiga yo'l ko'rsat» → bot
+lokatsiya pini va 🧭 Google Maps / Yandex / Apple Maps tugmalarini yuboradi — bosib, «Start».
+Joylar: `~/Library/Application Support/JARVIS/places.json` va Obsidian'da `JARVIS/Joylar.md`.
+
 ## Agent (ixtiyoriy, pullik)
 
 ```bash

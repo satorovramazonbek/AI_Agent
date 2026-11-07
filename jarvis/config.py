@@ -48,6 +48,14 @@ class Settings(BaseSettings):
     # Fayl tool'lari faqat shu papkalar ichida ishlaydi.
     allowed_roots: list[Path] = [Path.home() / "Documents", Path("/tmp/jarvis")]
 
+    # Telegram'da sizning nomingizdan yozish (my.telegram.org dan bepul api_id/api_hash).
+    tg_api_id: int = 0
+    tg_api_hash: str = ""
+    tg_session: Path = Path.home() / "Library" / "Application Support" / "JARVIS" / "telegram"
+
+    # Saqlangan joylar («Pismadonchani uyi» → koordinata).
+    places_file: Path = Path.home() / "Library" / "Application Support" / "JARVIS" / "places.json"
+
     # Ob-havo uchun standart shahar (wttr.in).
     city: str = "Tashkent"
 

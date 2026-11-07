@@ -166,6 +166,28 @@ class JarvisApp(rumps.App):
             self.history_menu.clear()
         for line in self.history:
             self.history_menu.add(rumps.MenuItem(line))
+        self._maybe_confirm()
+
+    def _maybe_confirm(self) -> None:
+        """Tasdiq kutayotgan amal bo'lsa (masalan Telegram xabari) — tugmali oyna."""
+        from jarvis.core import commands
+
+        p = commands.pending("app")
+        if not p:
+            return
+        ok = rumps.alert(title="JARVIS — tasdiqlang", message=p.question, ok="✅ Ha, bajar",
+                         cancel="❌ Yo'q")  # fmt: skip
+        decide = commands.confirm if ok == 1 else commands.cancel
+
+        def work() -> None:
+            try:
+                result = self.backend.submit(decide("app"))
+            except Exception as e:
+                result = f"Xato: {e}"
+            log.info("Tasdiq: %s → %s", "ha" if ok == 1 else "yo'q", result)
+            self.ui.put(("reply", result))
+
+        threading.Thread(target=work, daemon=True).start()
 
     # ---------- Fon ishlari ----------
 

@@ -10,7 +10,7 @@ DEST="$HOME/Applications/JARVIS.app"
 PY="$ROOT/.venv/bin/python"
 
 [[ -x "$PY" ]] || { echo "Avval: python3 -m venv .venv && .venv/bin/pip install -e '.[voice,app]'" >&2; exit 1; }
-"$PY" -c "import rumps, faster_whisper, sounddevice" 2>/dev/null \
+"$PY" -c "import rumps, faster_whisper, sounddevice, ApplicationServices, Quartz" 2>/dev/null \
   || "$ROOT/.venv/bin/pip" install -q -e "$ROOT[voice,app]"
 
 echo "→ belgilar"

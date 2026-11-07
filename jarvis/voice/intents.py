@@ -25,7 +25,7 @@ async def handle_text(text: str, session_id: str = "default") -> str:
     text = text.strip()
     if not text:
         return "Hech narsa eshitilmadi — qaytadan, balandroq gapiring."
-    reply = await run_command(text)
+    reply = await run_command(text, session_id)
     if reply is not None:
         return reply
     if get_agent().available:
