@@ -11,6 +11,9 @@ To'liq arxitektura hujjati: https://claude.ai/artifact/H7X3huFsHAdmwjjtCYhhjc
 - `jarvis/interfaces/api.py` — FastAPI: `/health`, `/tools`, `/policy/check`, `/agent/ask`,
   `/voice/transcribe`.
 - `jarvis/interfaces/telegram_bot.py` — aiogram bot, faqat egasining xabarlarini qabul qiladi.
+- `jarvis/core/commands.py` — **bepul buyruqlar** (API'siz): dastur ochish/yopish, ovoz,
+  soat/sana, batareya, ekranni qulflash, eslatmalar. O'zbek, rus (kirill ham) va ingliz tilida.
+- `jarvis/tools/macos.py` — macOS amallari (`open`, `osascript`, `pmset`), shell'siz.
 - `jarvis/core/agent.py` — agent sikli: Claude tool'larni (Tool Registry) chaqiradi,
   terminal buyruqlari Policy Gateway'dan o'tadi; xavfli buyruqlar bloklanadi yoki tasdiq kutadi.
 - `jarvis/models/router.py` — Model Router: LLM chaqiruvlarining yagona nuqtasi.
@@ -68,10 +71,26 @@ curl -F file=@ovoz.ogg http://127.0.0.1:8020/voice/transcribe
   Kuchsiz internet yoki tezlik kerak bo'lsa — `small`, lekin o'zbek tilida xato ko'payadi.
 - Til: `JARVIS_STT_LANGUAGE` (standart `uz`; bo'sh qoldirilsa avtomatik aniqlanadi).
 - Birinchi `jarvis-voice` ishga tushganda macOS Terminal'ga mikrofon ruxsatini so'raydi.
-- `.env` da `ANTHROPIC_API_KEY` bo'lsa, tanilgan matn agentga uzatiladi (istalgan savol/buyruq).
-  Kalit bo'lmasa faqat «holat» buyrug'i ishlaydi.
+- Tanilgan matn avval bepul buyruqlarga solishtiriladi (pastdagi jadval); mos kelmasa va
+  `ANTHROPIC_API_KEY` bo'lsa — agentga uzatiladi.
 
-## Agent
+## Bepul buyruqlar (API kerak emas)
+
+| Aytasiz | Bajariladi |
+|---|---|
+| «Safari'ni och», «brauzerni ochib ber», «Открой телеграм» | dastur ochiladi |
+| «Telegram'ni yop», «Закрой калькулятор» | dastur yopiladi |
+| «Ovozni ko'tar / pasaytir / o'chir / yoq», «Ovozni 40 ga qo'y», «Громче» | ovoz |
+| «Soat necha?», «Bugun nechanchi?», «Сколько времени?» | vaqt / sana |
+| «Batareya qancha?», «Kompyuter holati» | batareya / tizim |
+| «Ekranni qulfla» | ekran o'chadi |
+| «Eslatma: non olish», «Eslatmalarimni o'qi» | `~/Documents/JARVIS/eslatmalar.md` |
+| «Nima qila olasan?» | buyruqlar ro'yxati |
+
+Buyruq tanilmasa va `ANTHROPIC_API_KEY` bo'lsa, gap agentga uzatiladi; kalit bo'lmasa JARVIS
+buyruqlar ro'yxatini ko'rsatadi. Dastur yopishda macOS bir marta «boshqarishga ruxsat» so'raydi.
+
+## Agent (ixtiyoriy, pullik)
 
 ```bash
 curl -s http://127.0.0.1:8020/agent/ask -H 'content-type: application/json' \

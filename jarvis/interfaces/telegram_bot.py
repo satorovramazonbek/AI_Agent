@@ -11,6 +11,7 @@ from aiogram.filters import Command
 from aiogram.types import Message
 
 from jarvis.config import get_settings
+from jarvis.core.commands import HELP
 from jarvis.security.policy import CommandPolicy
 from jarvis.voice.intents import handle_text, status_text
 from jarvis.voice.stt import VoiceUnavailable, get_transcriber
@@ -26,8 +27,8 @@ def build_dispatcher(owner_id: int) -> Dispatcher:
     @dp.message(Command("start"))
     async def start(message: Message) -> None:
         await message.answer(
-            "JARVIS ishga tushdi. Buyruqlar: /status, /check <buyruq>.\n"
-            "Ovozli xabar ham yuborishingiz mumkin."
+            "JARVIS ishga tushdi. Yozing yoki ovozli xabar yuboring.\n\n"
+            f"{HELP}\n\nQo'shimcha: /status, /check <buyruq>"
         )
 
     @dp.message(Command("status"))

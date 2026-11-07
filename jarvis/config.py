@@ -38,6 +38,9 @@ class Settings(BaseSettings):
     # Fayl tool'lari faqat shu papkalar ichida ishlaydi.
     allowed_roots: list[Path] = [Path.home() / "Documents", Path("/tmp/jarvis")]
 
+    # Eslatmalar shu faylga yoziladi (ruxsat so'ramaydi, Obsidian'da ham ochiladi).
+    notes_file: Path = Path.home() / "Documents" / "JARVIS" / "eslatmalar.md"
+
     policy_file: Path = Path(__file__).resolve().parent.parent / "config" / "commands.yaml"
 
 
