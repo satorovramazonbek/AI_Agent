@@ -56,6 +56,7 @@ async def voice_transcribe(file: UploadFile, language: str | None = None) -> dic
         "text": t.text,
         "language": t.language,
         "duration": t.duration,
+        "confidence": t.confidence,
         "reply": await handle_text(t.text, "api"),
     }
 

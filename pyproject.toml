@@ -16,6 +16,7 @@ dependencies = [
     "pyyaml>=6.0",
     "python-multipart>=0.0.9",
     "anthropic>=2.6",
+    "certifi>=2024.2",
 ]
 
 [project.optional-dependencies]

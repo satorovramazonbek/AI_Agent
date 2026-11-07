@@ -16,6 +16,7 @@ import queue
 import subprocess
 import threading
 import webbrowser
+from datetime import datetime
 from pathlib import Path
 
 import rumps
@@ -102,6 +103,8 @@ class JarvisApp(rumps.App):
         self.talk = rumps.MenuItem("🎙  Gapirish", callback=self.on_talk, key="g")
         self.heard = rumps.MenuItem("Siz: —")
         self.reply = rumps.MenuItem("JARVIS: —")
+        self.history_menu = rumps.MenuItem("🕘  Oxirgi buyruqlar")
+        self.history: list[str] = []
         port = get_settings().app_port
         self.menu = [
             self.talk,
@@ -109,6 +112,7 @@ class JarvisApp(rumps.App):
             None,
             self.heard,
             self.reply,
+            self.history_menu,
             None,
             rumps.MenuItem("📝  Eslatmalarni ochish", callback=self.on_notes),
             rumps.MenuItem("❓  Nima qila olaman", callback=self.on_help),
@@ -139,11 +143,29 @@ class JarvisApp(rumps.App):
                 return
             if kind == "state":
                 self._set_state(value)
-            elif kind == "heard":
-                self.heard.title = f"Siz: {_short(value)}"
+            elif kind == "result":
+                self._show_result(*value)
             elif kind == "reply":
                 self.reply.title = f"JARVIS: {_short(value)}"
                 notify("JARVIS", value)
+
+    def _show_result(self, heard: str, reply: str, confidence: float | None) -> None:
+        from jarvis.voice.stt import LOW_CONFIDENCE
+
+        unsure = confidence is not None and confidence < LOW_CONFIDENCE
+        mark = f"  (?) {confidence:.0%}" if unsure else ""
+        self.heard.title = f"Siz: «{_short(heard, 50)}»{mark}"
+        self.reply.title = f"JARVIS: {_short(reply)}"
+        # Sarlavhada — eshitilgan gap (to'g'ri tanildimi, darrov ko'rinadi), matnda — javob.
+        title = f"🎙 «{_short(heard, 70)}»" + (" (?)" if unsure else "")
+        notify(title, reply)
+        line = f"{datetime.now():%H:%M}  «{_short(heard, 40)}» → {_short(reply, 40)}"
+        self.history.insert(0, line)
+        del self.history[10:]
+        if self.history_menu._menu is not None:
+            self.history_menu.clear()
+        for line in self.history:
+            self.history_menu.add(rumps.MenuItem(line))
 
     # ---------- Fon ishlari ----------
 
@@ -155,16 +177,17 @@ class JarvisApp(rumps.App):
         except VoiceUnavailable as e:
             self.ui.put(("reply", str(e)))
 
-    def _answer(self, text: str) -> None:
+    def _answer(self, text: str, confidence: float | None = None) -> None:
         from jarvis.voice.intents import handle_text
 
-        self.ui.put(("heard", text))
         try:
             reply = self.backend.submit(handle_text(text, "app"))
         except Exception as e:
             log.exception("Buyruq xatosi")
             reply = f"Xato: {e}"
-        self.ui.put(("reply", reply))
+        conf = f" [{confidence:.0%}]" if confidence is not None else ""
+        log.info("Siz: %s%s → JARVIS: %s", text, conf, reply.replace("\n", " | "))
+        self.ui.put(("result", (text, reply, confidence)))
 
     def _listen(self) -> None:
         from jarvis.voice.recorder import record_utterance
@@ -176,9 +199,9 @@ class JarvisApp(rumps.App):
                 self.ui.put(("reply", "Hech narsa eshitilmadi."))
                 return
             self.ui.put(("state", THINKING))
-            text = get_transcriber().transcribe_sync(audio).text
-            if text:
-                self._answer(text)
+            t = get_transcriber().transcribe_sync(audio)
+            if t.text:
+                self._answer(t.text, t.confidence)
             else:
                 self.ui.put(("reply", "Gapni tushunib bo'lmadi, qaytadan ayting."))
         except Exception as e:

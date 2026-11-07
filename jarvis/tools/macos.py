@@ -339,3 +339,179 @@ async def obsidian_write(args: NoteArgs) -> dict:
     else:
         await _run("open", "-a", "Obsidian")
     return {"status": "ok", "file": str(path), "opened": uri or "Obsidian"}
+
+
+@tool(name="notes.delete_last", description="Oxirgi eslatmani o'chiradi", risk=Risk.R1)
+async def delete_last_note(args: NoArgs) -> dict:
+    path = notes_file()
+    if not path.exists():
+        return {"status": "empty"}
+    lines = path.read_text(encoding="utf-8").splitlines(keepends=True)
+    for i in range(len(lines) - 1, -1, -1):
+        if lines[i].startswith("- "):
+            removed = lines.pop(i)
+            path.write_text("".join(lines), encoding="utf-8")
+            return {"status": "ok", "removed": removed[2:].strip()}
+    return {"status": "empty"}
+
+
+# ---------- Bildirishnoma va taymer ----------
+
+
+def _esc(s: str) -> str:
+    return s.replace("\\", "\\\\").replace('"', '\\"')
+
+
+async def notify(title: str, text: str, sound: bool = False) -> None:
+    await _run("osascript", "-e", f'display notification "{_esc(text)}" with title "{_esc(title)}"')
+    if sound:
+        await _run("afplay", "/System/Library/Sounds/Glass.aiff", timeout=10)
+
+
+_timers: set[asyncio.Task] = set()  # tugamagan taymerlar (GC o'chirib yubormasligi uchun)
+
+
+class TimerArgs(BaseModel):
+    seconds: int = Field(ge=1, le=24 * 3600)
+    label: str = Field(default="", max_length=200)
+
+
+@tool(name="timer.set", description="Taymer: vaqt tugaganda bildirishnoma", risk=Risk.R0)
+async def set_timer(args: TimerArgs) -> dict:
+    if sys.platform != "darwin":
+        raise MacOnly("taymer bildirishnomasi faqat Mac'da")
+
+    async def ring() -> None:
+        await asyncio.sleep(args.seconds)
+        await notify("⏰ JARVIS taymer", args.label or "Vaqt tugadi!", sound=True)
+
+    task = asyncio.get_running_loop().create_task(ring())
+    _timers.add(task)
+    task.add_done_callback(_timers.discard)
+    return {"status": "ok", "seconds": args.seconds, "active": len(_timers)}
+
+
+# ---------- Musiqa ----------
+
+
+class MusicArgs(BaseModel):
+    action: Literal["play", "pause", "playpause", "next", "previous"]
+
+
+@tool(name="macos.music", description="Musiqa: qo'yish, to'xtatish, keyingi", risk=Risk.R1)
+async def music(args: MusicArgs) -> dict:
+    code, _, _ = await _run("pgrep", "-x", "Spotify")
+    player = "Spotify" if code == 0 else "Music"
+    command = {
+        "play": "play",
+        "pause": "pause",
+        "playpause": "playpause",
+        "next": "next track",
+        "previous": "previous track",
+    }[args.action]
+    await _osascript(f'tell application "{player}" to {command}')
+    return {"status": "ok", "player": player}
+
+
+# ---------- Tizim: tungi rejim, Wi-Fi, uyqu, skrinshot ----------
+
+
+class ToggleArgs(BaseModel):
+    on: bool | None = Field(default=None, description="True/False; None — almashtirish")
+
+
+@tool(name="macos.dark_mode", description="Tungi (qorong'i) rejim", risk=Risk.R1)
+async def dark_mode(args: ToggleArgs) -> dict:
+    value = "not dark mode" if args.on is None else str(args.on).lower()
+    prefs = 'tell application "System Events" to tell appearance preferences to'
+    await _osascript(f"{prefs} set dark mode to {value}")
+    out = await _osascript(f"{prefs} get dark mode")
+    return {"dark": out == "true"}
+
+
+async def _wifi_device() -> str:
+    _, out, _ = await _run("networksetup", "-listallhardwareports")
+    m = re.search(r"Hardware Port: Wi-Fi\s*\nDevice: (\S+)", out)
+    return m.group(1) if m else "en0"
+
+
+@tool(name="macos.wifi", description="Wi-Fi'ni yoqish/o'chirish", risk=Risk.R2)
+async def wifi(args: ToggleArgs) -> dict:
+    dev = await _wifi_device()
+    if args.on is not None:
+        code, _, err = await _run(
+            "networksetup", "-setairportpower", dev, "on" if args.on else "off"
+        )
+        if code != 0:
+            raise RuntimeError(err or "Wi-Fi o'zgarmadi")
+    _, out, _ = await _run("networksetup", "-getairportpower", dev)
+    return {"on": out.strip().endswith("On"), "device": dev}
+
+
+@tool(name="macos.sleep", description="Kompyuterni uxlatadi", risk=Risk.R1)
+async def sleep_now(args: NoArgs) -> dict:
+    await _run("pmset", "sleepnow")
+    return {"status": "ok"}
+
+
+@tool(name="macos.screenshot", description="Ekran rasmini ish stoliga saqlaydi", risk=Risk.R1)
+async def screenshot(args: NoArgs) -> dict:
+    path = Path.home() / "Desktop" / f"JARVIS {datetime.now():%Y-%m-%d %H.%M.%S}.png"
+    code, _, err = await _run("screencapture", "-x", str(path))
+    if code != 0 or not path.exists():
+        raise RuntimeError(err or "ekranni olib bo'lmadi (Screen Recording ruxsatini bering)")
+    return {"status": "ok", "file": str(path)}
+
+
+# ---------- Papkalar va saytlar ----------
+
+FOLDERS = {
+    "downloads": "Downloads", "yuklamalar": "Downloads", "yuklanmalar": "Downloads",
+    "zagruzki": "Downloads", "yuklab olinganlar": "Downloads",
+    "desktop": "Desktop", "ish stoli": "Desktop", "rabochiy stol": "Desktop",
+    "documents": "Documents", "hujjatlar": "Documents", "dokumenty": "Documents",
+    "pictures": "Pictures", "suratlar": "Pictures", "izobrazheniya": "Pictures",
+    "movies": "Movies", "videolar": "Movies",
+    "music papka": "Music", "uy papka": "", "home": "", "uy": "",
+}  # fmt: skip
+
+SITES = {
+    "youtube": "https://www.youtube.com", "yutub": "https://www.youtube.com",
+    "yutube": "https://www.youtube.com", "utub": "https://www.youtube.com",
+    "gmail": "https://mail.google.com", "pochta google": "https://mail.google.com",
+    "github": "https://github.com", "gitxab": "https://github.com", "githab": "https://github.com",
+    "google": "https://www.google.com", "gugl": "https://www.google.com",
+    "instagram": "https://www.instagram.com", "instagramm": "https://www.instagram.com",
+    "chatgpt": "https://chatgpt.com", "chat gpt": "https://chatgpt.com",
+    "claude ai": "https://claude.ai", "tarjimon": "https://translate.google.com",
+    "translate": "https://translate.google.com", "perevodchik": "https://translate.google.com",
+    "kun uz": "https://kun.uz", "kunuz": "https://kun.uz",
+    "linkedin": "https://www.linkedin.com", "facebook": "https://www.facebook.com",
+    "x com": "https://x.com", "twitter": "https://x.com",
+    "olx": "https://www.olx.uz", "hh": "https://hh.uz", "uzum": "https://uzum.uz",
+    "netflix": "https://www.netflix.com", "wikipedia": "https://www.wikipedia.org",
+}  # fmt: skip
+
+
+class OpenFolderArgs(BaseModel):
+    name: str
+
+
+@tool(name="macos.open_folder", description="Finder'da papka ochadi", risk=Risk.R0)
+async def open_folder(args: OpenFolderArgs) -> dict:
+    key = _norm(args.name)
+    if key not in FOLDERS:
+        return {"status": "not_found"}
+    path = Path.home() / FOLDERS[key]
+    await _run("open", str(path))
+    return {"status": "ok", "path": str(path)}
+
+
+class OpenUrlArgs(BaseModel):
+    url: str = Field(pattern=r"^https://")
+
+
+@tool(name="web.open_url", description="Brauzerda https havolani ochadi", risk=Risk.R1)
+async def open_url(args: OpenUrlArgs) -> dict:
+    await _run("open", args.url)
+    return {"status": "ok", "url": args.url}

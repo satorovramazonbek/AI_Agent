@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import math
 import threading
 from dataclasses import dataclass
 from functools import lru_cache
@@ -28,6 +29,14 @@ class Transcript:
     text: str
     language: str
     duration: float
+    confidence: float = 1.0  # 0..1 — Whisper qanchalik ishonch bilan tanigani
+
+    @property
+    def unsure(self) -> bool:
+        return self.confidence < LOW_CONFIDENCE
+
+
+LOW_CONFIDENCE = 0.5
 
 
 class Transcriber:
@@ -73,8 +82,15 @@ class Transcriber:
                 beam_size=5,
                 vad_filter=True,  # jimlik va shovqinni tashlab yuboradi
             )
-            text = " ".join(s.text.strip() for s in segments).strip()
-        return Transcript(text=text, language=info.language, duration=round(info.duration, 1))
+            segs = list(segments)
+        text = " ".join(s.text.strip() for s in segs).strip()
+        conf = math.exp(sum(s.avg_logprob for s in segs) / len(segs)) if segs else 0.0
+        return Transcript(
+            text=text,
+            language=info.language,
+            duration=round(info.duration, 1),
+            confidence=round(min(conf, 1.0), 2),
+        )
 
     async def transcribe(self, audio: str | Path | Any, language: str | None = None) -> Transcript:
         return await asyncio.to_thread(self.transcribe_sync, audio, language)

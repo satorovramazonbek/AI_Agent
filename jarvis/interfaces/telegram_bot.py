@@ -58,7 +58,8 @@ def build_dispatcher(owner_id: int) -> Dispatcher:
             except VoiceUnavailable as e:
                 await message.answer(f"Ovoz moduli ishlamayapti: {e}")
                 return
-        await message.answer(f"🎙 {t.text or '(eshitilmadi)'}")
+        mark = f" (?) — ishonch {t.confidence:.0%}" if t.unsure else ""
+        await message.answer(f"🎙 {t.text or '(eshitilmadi)'}{mark}")
         await message.answer(await handle_text(t.text, f"tg:{message.chat.id}"))
 
     @dp.message()

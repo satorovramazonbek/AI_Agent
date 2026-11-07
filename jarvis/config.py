@@ -40,6 +40,9 @@ class Settings(BaseSettings):
     # Fayl tool'lari faqat shu papkalar ichida ishlaydi.
     allowed_roots: list[Path] = [Path.home() / "Documents", Path("/tmp/jarvis")]
 
+    # Ob-havo uchun standart shahar (wttr.in).
+    city: str = "Tashkent"
+
     # Eslatmalar fayli. Bo'sh bo'lsa: Obsidian vault topilsa <vault>/JARVIS/Eslatmalar.md,
     # aks holda ~/Documents/JARVIS/eslatmalar.md.
     notes_file: Path | None = None

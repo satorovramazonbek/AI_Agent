@@ -69,7 +69,8 @@ async def _listen_loop(transcriber: Transcriber, language: str | None) -> None:
             print("Juda qisqa yozuv, qaytadan urinib ko'ring.")
             continue
         t = await transcriber.transcribe(audio, language)
-        print(f"📝 Siz: {t.text or '(eshitilmadi)'}  [{t.language}, {t.duration}s]")
+        mark = " (?) — aniq eshitmadim" if t.unsure else ""
+        print(f"📝 Siz: {t.text or '(eshitilmadi)'}  [{t.language}, {t.confidence:.0%}]{mark}")
         print(f"🤖 JARVIS: {await handle_text(t.text, 'mic')}")
 
 
