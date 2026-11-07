@@ -46,10 +46,12 @@ class Transcriber:
         language: str | None,
         compute_type: str = "int8",
         prompt: str | None = None,
+        hotwords=None,
     ):
         self.model_name = model_name
         self.language = language or None
         self.prompt = prompt or None
+        self.hotwords = hotwords  # callable → str: tanish ismlar (Kontaktlar, Telegram chatlari)
         self.compute_type = compute_type
         self._model: Any = None
         self._lock = threading.Lock()
@@ -91,6 +93,7 @@ class Transcriber:
                 vad_filter=True,  # jimlik va shovqinni tashlab yuboradi
                 # O'zbekcha namuna faqat uz/avtomatik tilda — rus/inglizga xalaqit bermasin.
                 initial_prompt=self.prompt if lang in (None, "uz") else None,
+                hotwords=self._hotwords() if lang in (None, "uz") else None,
             )
             segs = list(segments)
         text = " ".join(s.text.strip() for s in segs).strip()
@@ -102,6 +105,15 @@ class Transcriber:
             confidence=round(min(conf, 1.0), 2),
         )
 
+    def _hotwords(self) -> str | None:
+        if not self.hotwords:
+            return None
+        try:
+            return self.hotwords() or None
+        except Exception:
+            log.warning("hotwords olinmadi", exc_info=True)
+            return None
+
     async def transcribe(self, audio: str | Path | Any, language: str | None = None) -> Transcript:
         return await asyncio.to_thread(self.transcribe_sync, audio, language)
 
@@ -109,4 +121,6 @@ class Transcriber:
 @lru_cache
 def get_transcriber() -> Transcriber:
     s = get_settings()
-    return Transcriber(s.stt_model, s.stt_language, prompt=s.stt_prompt)
+    from jarvis.tools.contacts import hotwords
+
+    return Transcriber(s.stt_model, s.stt_language, prompt=s.stt_prompt, hotwords=hotwords)

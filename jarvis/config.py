@@ -65,6 +65,8 @@ class Settings(BaseSettings):
     # Obsidian vault papkasi. Bo'sh bo'lsa Obsidian sozlamalaridan avtomatik topiladi.
     obsidian_vault: Path | None = None
 
+    uz_fixes_file: Path = Path(__file__).resolve().parent.parent / "config" / "uz_fixes.yaml"
+
     policy_file: Path = Path(__file__).resolve().parent.parent / "config" / "commands.yaml"
 
 

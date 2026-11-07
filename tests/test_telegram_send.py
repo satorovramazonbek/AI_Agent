@@ -47,6 +47,9 @@ CONTACTS = [
         ("Алишерга салом деб ёз", "Алишер", "салом"),
         ("Напиши Али в телеграм привет", "Али", "привет"),
         ("Отправь Сардору сообщение: завтра приду", "Сардору", "завтра приду"),
+        # haqiqiy logdan: Whisper «salom deb yubor» ni shunday eshitgan
+        ("Telegram'dan oktanga salon de bibor.", "oktan", "salon"),
+        ("Aliga salom dep yubar", "Ali", "salom"),
     ],
 )
 def test_parse(text, name, msg):

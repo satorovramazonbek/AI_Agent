@@ -35,7 +35,7 @@ def _forbid(what):
 
 @pytest.fixture(autouse=True)
 def no_real_world(monkeypatch, tmp_path):
-    from jarvis.tools import macos, places, telegram_ui, telegram_user
+    from jarvis.tools import contacts, macos, places, telegram_ui, telegram_user
 
     # Claude API
     monkeypatch.setattr("jarvis.voice.intents.get_agent", lambda: SimpleNamespace(available=False))
@@ -50,3 +50,7 @@ def no_real_world(monkeypatch, tmp_path):
     monkeypatch.setattr(places, "store_path", lambda: tmp_path / "places.json")
     monkeypatch.setattr(macos, "obsidian_vault", lambda: None)
     monkeypatch.setattr(macos, "notes_file", lambda: tmp_path / "eslatmalar.md")
+    # Ismlar: haqiqiy Mac Kontaktlari o'qilmaydi, eslab qolinganlar vaqtinchalik faylda
+    monkeypatch.setattr(contacts, "mac_contacts", lambda request=False: [])
+    monkeypatch.setattr(contacts, "chats_file", lambda: tmp_path / "known_chats.json")
+    monkeypatch.setattr(contacts, "_cache", None)

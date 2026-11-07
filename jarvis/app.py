@@ -192,8 +192,10 @@ class JarvisApp(rumps.App):
     # ---------- Fon ishlari ----------
 
     def _preload(self) -> None:
+        from jarvis.tools import contacts
         from jarvis.voice.stt import VoiceUnavailable, get_transcriber
 
+        contacts.mac_contacts(request=True)  # birinchi marta macOS Kontaktlar ruxsatini so'raydi
         try:
             get_transcriber()._load()  # birinchi buyruq kutib qolmasin
         except VoiceUnavailable as e:

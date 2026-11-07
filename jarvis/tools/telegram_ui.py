@@ -77,21 +77,46 @@ def _telegram_app():
     return None
 
 
+def _main_window(ax):
+    """Asosiy oyna: AXWindows ba'zan bo'sh qaytadi — asosiy/fokusdagi oynani ham tekshiramiz."""
+    AS = _ax()
+    candidates = list(_attr(ax, AS.kAXWindowsAttribute) or [])
+    for name in (AS.kAXMainWindowAttribute, AS.kAXFocusedWindowAttribute):
+        w = _attr(ax, name)
+        if w is not None:
+            candidates.append(w)
+
+    def area(w):
+        if _attr(w, AS.kAXSubroleAttribute) != "AXStandardWindow":
+            return 0  # qidiruv takliflari kabi kichik panellar emas
+        size = _point(w, AS.kAXSizeAttribute, AS.kAXValueCGSizeType)
+        return size.width * size.height if size else 0
+
+    best = max(candidates, key=area, default=None)
+    return best if best is not None and area(best) > 0 else None
+
+
 def _activate() -> Any:
-    """Telegram'ni ochadi/oldinga chiqaradi va asosiy oynasini qaytaradi."""
+    """Telegram'ni ochadi/oldinga chiqaradi va asosiy oynasini qaytaradi.
+
+    macOS 14+ fon ilovasiga boshqa dasturni oldinga chiqarishga ruxsat bermaydi
+    (cooperative activation), shuning uchun Accessibility orqali AXFrontmost qo'yiladi.
+    """
     AS = _ax()
     subprocess.run(["open", "-a", "Telegram"], check=False)
     deadline = time.monotonic() + 8
     while time.monotonic() < deadline:
         app = _telegram_app()
         if app is not None:
-            app.activateWithOptions_(1 << 1)  # NSApplicationActivateIgnoringOtherApps
             ax = AS.AXUIElementCreateApplication(app.processIdentifier())
-            windows = _attr(ax, AS.kAXWindowsAttribute) or []
-            if windows and app.isActive():
-                return windows[0]
+            AS.AXUIElementSetAttributeValue(ax, "AXFrontmost", True)
+            window = _main_window(ax)
+            if window is not None:
+                AS.AXUIElementPerformAction(window, "AXRaise")
+                if _attr(ax, "AXFrontmost"):
+                    return window
         time.sleep(0.2)
-    raise TelegramUIError("Telegram oynasi ochilmadi")
+    raise TelegramUIError("Telegram oynasi ochilmadi (Telegram oldinga chiqmadi)")
 
 
 def _walk(el, depth=0):
@@ -197,15 +222,18 @@ def _open_chat_and_draft(name: str, message: str) -> Draft:
         _key("a", cmd=True)
         _paste(name)
         time.sleep(1.3)  # qidiruv natijalari chiqishini kutamiz
-        _key("down")
-        time.sleep(0.15)
-        _key("return")  # birinchi natijani ochish
+        _key("return")  # birinchi natija o'zi belgilangan bo'ladi — «pastga» bosilmaydi
         time.sleep(1.0)
 
         window = _activate()
         title = _chat_title(window)
         inputs = _find(window, ("AXTextArea",))
         if not inputs:
+            if title:
+                raise TelegramUIError(
+                    f"«{title}» ochildi, lekin unga yozib bo'lmaydi (kanal bo'lishi mumkin). "
+                    "Ism-familiyani to'liqroq ayting."
+                )
             raise TelegramUIError(f"«{name}» chati ochilmadi — Telegram'da topilmadi shekilli")
         _focus(inputs[-1])  # xabar maydoni — oynaning eng pastidagi
         time.sleep(0.1)

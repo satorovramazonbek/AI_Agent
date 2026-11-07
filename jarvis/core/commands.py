@@ -7,6 +7,7 @@ tinish belgilarisiz. Keyin tartib bo'yicha birinchi mos kelgan qoida bajariladi.
 
 from __future__ import annotations
 
+import asyncio
 import contextvars
 import re
 import time
@@ -17,7 +18,7 @@ from datetime import datetime
 from pathlib import Path
 
 from jarvis.config import get_settings
-from jarvis.tools import macos, places, telegram_ui, telegram_user, web
+from jarvis.tools import contacts, macos, places, telegram_ui, telegram_user, web
 from jarvis.tools.system import NoArgs, system_status
 
 # ---------- Normallashtirish ----------
@@ -217,9 +218,10 @@ async def _obsidian(m: re.Match) -> str:
 _TG = r"(?:telegram|telegramm|телеграм)\S*"
 _DAT = r"(?:ga|ka|qa|га|ка|қа)"
 _NAME = r"(?P<name>[^\s,:]+?(?:\s+[^\s,:]+?)?)" + _DAT + r"\b"
-_SEND = (r"(?:yoz|yubor|jo\W?nat|ayt|ёз|юбор|жўнат|айт)\w*"
-         r"(?:\s+(?:ber|qo\W?y|yubor|jo\W?nat|бер|қўй|юбор)\w*)?")  # fmt: skip
-_DEB = r"(?:deb|deya|degin|деб|дея)"
+# Whisper buzilishlari ham: «de bibor», «dep yubar», «deb ybor»
+_SEND = (r"(?:yoz|yubor|yubar|ybor|bibor|jo\W?nat|ayt|ёз|юбор|жўнат|айт)\w*"
+         r"(?:\s+(?:ber|qo\W?y|yubor|yubar|bibor|jo\W?nat|бер|қўй|юбор)\w*)?")  # fmt: skip
+_DEB = r"(?:deb|dep|de|deya|degin|деб|дея|де)"
 _TG_PRE = (_WAKE_RAW + rf"(?:{_TG}\s*(?:ni\s+|ни\s+)?(?:och\w*|оч\w*|orqali|орқали)?"
            r"\s*(?:va\s+|ва\s+|,\s*)?)?")  # fmt: skip
 _TELEGRAM = [
@@ -251,6 +253,40 @@ def _telegram_match(text: str):
     return None
 
 
+_fixes_cache: tuple[float, list[tuple[re.Pattern, str]]] | None = None
+
+
+def _load_fixes() -> list[tuple[re.Pattern, str]]:
+    global _fixes_cache
+    import yaml
+
+    path = get_settings().uz_fixes_file
+    try:
+        mtime = path.stat().st_mtime
+    except OSError:
+        return []
+    if _fixes_cache and _fixes_cache[0] == mtime:
+        return _fixes_cache[1]
+    data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    rules = [
+        (re.compile(rf"(?<!\w){re.escape(str(wrong))}(?!\w)", re.IGNORECASE), str(right))
+        for wrong, right in sorted(data.items(), key=lambda kv: -len(str(kv[0])))
+    ]
+    _fixes_cache = (mtime, rules)
+    return rules
+
+
+def _same_case(original: str, replacement: str) -> str:
+    return replacement[:1].upper() + replacement[1:] if original[:1].isupper() else replacement
+
+
+def fix_message(text: str) -> str:
+    """«salon» → «salom» (config/uz_fixes.yaml); bosh harf saqlanadi."""
+    for rx, right in _load_fixes():
+        text = rx.sub(lambda m, r=right: _same_case(m.group(0), r), text)
+    return text
+
+
 def _telegram_backend() -> str:
     """«api» — my.telegram.org kalitlari sozlangan bo'lsa; aks holda ekran orqali («ui»)."""
     s = get_settings()
@@ -270,21 +306,30 @@ async def _telegram_send(found) -> str:
 
 async def _telegram_send_ui(found) -> str:
     spoken, msg = found
+    msg = fix_message(msg)
+    known = await asyncio.to_thread(contacts.best_match, spoken)
+    query = known or spoken
     try:
-        draft = await telegram_ui.open_chat_and_draft(spoken, msg)
+        draft = await telegram_ui.open_chat_and_draft(query, msg)
     except telegram_ui.TelegramUIError as e:
         return str(e)
     chat = draft.chat_title or "?"
     warn = ""
-    if draft.chat_title and not _looks_like(spoken, draft.chat_title):
+    if draft.chat_title and not _looks_like(query, draft.chat_title):
         warn = f"\n⚠️ Diqqat: siz «{spoken}» dedingiz, lekin «{chat}» chati ochildi!"
+    corrected = known and not telegram_user.name_key(known).startswith(
+        telegram_user.name_key(spoken)
+    )
+    heard = f" («{spoken}» deb eshitdim → «{known}»)" if corrected else ""
 
     async def do_send() -> str:
         await telegram_ui.press_send()
+        if draft.chat_title:
+            contacts.remember(draft.chat_title)  # keyingi safar ismni tanish uchun
         return f"✅ Yuborildi → {chat}: «{msg}»"
 
     return ask_confirmation(
-        f"Telegram'da «{chat}» chati ochildi, xabar yozib qo'yildi:\n«{msg}»{warn}\n"
+        f"Telegram'da «{chat}» chati ochildi{heard}, xabar yozib qo'yildi:\n«{msg}»{warn}\n"
         "Ekranga qarang — to'g'ri odammi? Yuboraymi?",
         do_send,
         on_cancel=telegram_ui.clear_draft,
