@@ -600,7 +600,7 @@ RULES: list[Rule] = [
                     r"\b(gromche|louder)\b", _volume("up")),
     _r("volume.down", VOL + r".*\b(pasaytir|past|kamaytir|sekin|down|kichik)|"
                       r"\b(tishe|quieter)\b", _volume("down")),
-    _r("time", r"\b(soat|vaqt)\s+(necha|nechchi|nechi|qancha)|\bhozir soat\b|\bskolko vremeni\b|"
+    _r("time", r"\b(soat|vaqt)\s+(necha|nechchi|nechi|qancha)|\bhozir soat\b|\bskolk[oa] vremeni\b|"
                r"\bkotoriy chas\b|\bwhat time\b", _time),
     _r("date", r"\bbugun\s+(nechanchi|qanaqa kun|qaysi kun|sana)|\bsana\b|"
                r"\bkakoe segodnya chislo\b|\bwhat day\b|\bdate today\b", _date),

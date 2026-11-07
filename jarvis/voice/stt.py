@@ -118,9 +118,76 @@ class Transcriber:
         return await asyncio.to_thread(self.transcribe_sync, audio, language)
 
 
+class MlxTranscriber:
+    """Apple Silicon grafik yadrolarida (MLX) — CPU'dagidan tezroq va ancha kam qizdiradi."""
+
+    def __init__(self, model_path: str | Path, language: str | None):
+        self.model_name = str(model_path)
+        self.language = language or None
+        self._model: Any = None
+        self._lock = threading.Lock()
+
+    def _load(self) -> Any:
+        if self._model is None:
+            try:
+                import mlx.core as mx
+                from mlx_whisper.transcribe import ModelHolder
+            except ImportError as e:
+                raise VoiceUnavailable('mlx-whisper o\'rnatilmagan: pip install -e ".[app]"') from e
+            log.info("Whisper (MLX, GPU) yuklanmoqda: %s", self.model_name)
+            self._model = ModelHolder.get_model(self.model_name, mx.float16)
+        return self._model
+
+    def transcribe_sync(self, audio: str | Path | Any, language: str | None = None) -> Transcript:
+        import mlx_whisper
+
+        with self._lock:
+            self._load()
+            if isinstance(audio, Path):
+                audio = str(audio)
+            result = mlx_whisper.transcribe(
+                audio,
+                path_or_hf_repo=self.model_name,
+                language=language or self.language,
+                condition_on_previous_text=False,  # qisqa buyruqlarda «xayoliy» matnni kamaytiradi
+                verbose=None,
+            )
+        segs = [s for s in result.get("segments", []) if s.get("no_speech_prob", 0) < 0.8]
+        text = " ".join(s["text"].strip() for s in segs).strip()
+        conf = math.exp(sum(s["avg_logprob"] for s in segs) / len(segs)) if segs else 0.0
+        duration = segs[-1]["end"] if segs else 0.0
+        return Transcript(
+            text=text,
+            language=result.get("language") or (language or self.language or ""),
+            duration=round(float(duration), 1),
+            confidence=round(min(conf, 1.0), 2),
+        )
+
+    async def transcribe(self, audio: str | Path | Any, language: str | None = None) -> Transcript:
+        return await asyncio.to_thread(self.transcribe_sync, audio, language)
+
+
+def _mlx_ready(model_path: Path) -> bool:
+    import platform
+    import sys
+
+    if sys.platform != "darwin" or platform.machine() != "arm64":
+        return False
+    if not (model_path / "weights.safetensors").exists():
+        return False
+    try:
+        import mlx_whisper  # noqa: F401
+    except ImportError:
+        return False
+    return True
+
+
 @lru_cache
-def get_transcriber() -> Transcriber:
+def get_transcriber() -> Transcriber | MlxTranscriber:
     s = get_settings()
+    engine = s.stt_engine
+    if engine == "mlx" or (engine == "auto" and _mlx_ready(s.stt_mlx_model)):
+        return MlxTranscriber(s.stt_mlx_model, s.stt_language)
     from jarvis.tools.contacts import hotwords
 
     if not s.stt_use_hints:

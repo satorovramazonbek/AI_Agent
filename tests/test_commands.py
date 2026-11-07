@@ -69,6 +69,7 @@ def test_normalize(raw, expected):
         ("Ovozni 40 ga qo'y", "volume.set"),
         ("Soat necha?", "time"),
         ("Сколько времени", "time"),
+        ("Jarvis, skolka времени?", "time"),  # CT2 shunday yozgan
         ("Bugun nechanchi?", "date"),
         ("Batareya qancha?", "battery"),
         ("Zaryad qancha qoldi", "battery"),

@@ -77,6 +77,15 @@ qayta ishga tushiring.
 
 ## Ovoz
 
+**Tezkor va salqin rejim (Apple Silicon, tavsiya etiladi):** Whisper grafik yadrolarda (MLX):
+bitta buyruq ~1 s, protsessor deyarli band bo'lmaydi (CT2 da ~5 s va ~4 yadro).
+
+```bash
+.venv/bin/python scripts/convert_mlx.py   # o'zbekcha modelni MLX'ga o'giradi (~1.6 GB, bir marta)
+```
+
+Model bo'lsa JARVIS uni avtomatik ishlatadi (`JARVIS_STT_ENGINE=auto`); bo'lmasa CT2 (CPU).
+
 Ovoz moduli Mac'da native ishlaydi (Docker'da o'rnatilmaydi):
 
 ```bash

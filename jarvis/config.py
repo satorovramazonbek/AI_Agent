@@ -34,6 +34,13 @@ class Settings(BaseSettings):
     # o'rniga «o'ktamga salom deb yubor» deb to'g'ri eshitdi. Asl model: "large-v3-turbo".
     stt_model: str = "hostmepanda/whisper-large-v3-turbo-uzbek-ct2"
     stt_language: str = "uz"  # bo'sh qoldirilsa til avtomatik aniqlanadi
+    # Dvigatel: "auto" — Apple Silicon'da MLX (GPU, kam qizdiradi), bo'lmasa CT2 (CPU).
+    # MLX modeli: scripts/convert_mlx.py qirol4006/Whisper-3-turbo-uzbek
+    stt_engine: str = "auto"  # auto | mlx | ct2
+    stt_mlx_model: Path = (
+        Path.home() / "Library" / "Application Support" / "JARVIS" / "models"
+        / "whisper-3-turbo-uzbek-mlx"
+    )
     voice_max_seconds: int = 300
     # Whisper'ga namuna va tanish ismlar (hotwords). O'zbekcha model bularsiz yaxshiroq —
     # ular bilan bo'sh natija qaytaradi; asl "large-v3-turbo" da yoqish foydali.
