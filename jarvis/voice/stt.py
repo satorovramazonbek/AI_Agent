@@ -46,12 +46,19 @@ class Transcriber:
                 raise VoiceUnavailable(
                     'faster-whisper o\'rnatilmagan: pip install -e ".[voice]"'
                 ) from e
-            log.info(
-                "Whisper modeli yuklanmoqda: %s (birinchi marta yuklab olinadi)", self.model_name
-            )
-            self._model = WhisperModel(
-                self.model_name, device="cpu", compute_type=self.compute_type
-            )
+            log.info("Whisper modeli yuklanmoqda: %s", self.model_name)
+            try:  # avval Mac'dagi nusxa — internetsiz va tez ochiladi
+                self._model = WhisperModel(
+                    self.model_name,
+                    device="cpu",
+                    compute_type=self.compute_type,
+                    local_files_only=True,
+                )
+            except Exception:
+                log.info("Model Mac'da yo'q — yuklab olinmoqda (~1.6 GB, bir marta)")
+                self._model = WhisperModel(
+                    self.model_name, device="cpu", compute_type=self.compute_type
+                )
         return self._model
 
     def transcribe_sync(self, audio: str | Path | Any, language: str | None = None) -> Transcript:

@@ -45,7 +45,26 @@ python -m jarvis.main         # port: JARVIS_PORT (standart 8010)
 > tool'lar (dastur ochish, AppleScript, mikrofon) keyingi bosqichlarda Mac'da native ishga tushiriladi.
 > Docker'da — API, Telegram bot va ma'lumotlar bazasi.
 
-## Fon xizmati (Mac yonganda o'zi ishga tushadi)
+## JARVIS.app — Mac ilovasi (tavsiya etiladi)
+
+```bash
+python3 -m venv .venv && .venv/bin/pip install -e ".[voice,app]"
+./scripts/build-app.sh        # ~/Applications/JARVIS.app ga o'rnatadi
+open ~/Applications/JARVIS.app
+```
+
+- Menyu panelida (soat yonida) halqa belgisi chiqadi; Dock'da ko'rinmaydi.
+- **🎙 Gapirish** — bir marta bosing va gapiring; jim qolsangiz yozish o'zi to'xtaydi.
+  Javob bildirishnoma bo'lib keladi. **⌨️ Yozib buyruq berish** — matn bilan.
+- API (`127.0.0.1:8020`, `JARVIS_APP_PORT`) va Telegram bot ilova ichida ishlaydi.
+- Birinchi «Gapirish»da macOS mikrofon ruxsatini so'raydi — «JARVIS» uchun ruxsat bering.
+- Mac yonganda ochilishi uchun: System Settings → General → Login Items → «+» → JARVIS.
+- Log: `~/Library/Logs/jarvis/app.log`. Kod o'zgarsa qayta yig'ish shart emas — ilovani
+  qayta ochish kifoya (ilova loyiha papkasidagi `.venv` dan ishlaydi).
+
+## Fon xizmati (ilovasiz variant)
+
+> JARVIS.app ishlatsangiz, bu xizmat kerak emas (ikkalasi ham 8020-portni ishlatadi).
 
 ```bash
 ./scripts/install-launchd.sh     # o'rnatish va ishga tushirish (port 8020)

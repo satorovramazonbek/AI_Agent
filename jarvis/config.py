@@ -15,6 +15,8 @@ class Settings(BaseSettings):
 
     # API porti. Docker konteyner ichida 8000 (compose tashqariga JARVIS_PORT ni ochadi).
     port: int = 8010
+    # JARVIS.app (menyu paneli) API porti — Docker (8010) bilan to'qnashmasligi uchun alohida.
+    app_port: int = 8020
 
     # Telegram: token bo'sh bo'lsa bot ishga tushmaydi (faqat API ishlaydi).
     telegram_token: str = ""
