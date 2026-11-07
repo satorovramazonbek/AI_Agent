@@ -49,7 +49,8 @@ HELP = (
     "• «Soat necha?», «Bugun nechanchi?»\n"
     "• «Batareya qancha?», «Kompyuter holati»\n"
     "• «Ekranni qulfla»\n"
-    "• «Eslatma: non olish», «Eslatmalarimni o'qi»"
+    "• «Eslatma: non olish», «Eslatmalarimni o'qi»\n"
+    "• «Obsidianni och va yozib qo'y: ...», «Obsidian'ga yoz: ...»"
 )
 
 
@@ -137,6 +138,37 @@ async def _note_add(m: re.Match) -> str:
     return f"Yozib qo'ydim: «{m.group(1).strip()}»."
 
 
+_WAKE_RAW = r"^\s*(?:(?:hey|эй)\s+)?(?:(?:jarvis|джарвис)[,!.\s]*)?"
+_OBS = r"(?:obsidian|обсидиан)\S*"
+_OPEN_WORD = r"(?:och\w*|оч\w*|открой|open)"
+_WRITE = (
+    r"(?:yoz(?:ib|gin|ing)?\b(?:\s+qo\W?y\w*)?|qayd\s+et\w*|saqla(?:b|gin|ng)?\b(?:\s+qo\W?y\w*)?"
+    r"|ёз(?:иб|гин)?\b(?:\s+қўй\w*)?|запиши|сохрани|write)"
+)
+_FILLER = r"(?:(?:bu|shu|бу|шу)\s+ma\W?lumot\w*\s+|(?:bu|shu|бу|шу)\s+маълумот\w*\s+)?"
+_OBSIDIAN = [
+    # «Obsidianni och va yozib qo'y: ...», «Obsidian'ga yoz: ...», «Открой обсидиан и запиши ...»
+    re.compile(
+        _WAKE_RAW + rf"(?:{_OPEN_WORD}\s+)?{_OBS}(?:\s+{_OPEN_WORD})?\s*(?:,|\bva\b|\bва\b|\bи\b)?"
+        rf"\s*{_FILLER}{_WRITE}\s*[:,\-]?\s*(?P<text>.*)$",
+        re.IGNORECASE | re.DOTALL,
+    ),
+    # «Yozib qo'y obsidianga: ...», «Запиши в обсидиан ...»
+    re.compile(
+        _WAKE_RAW + rf"{_FILLER}{_WRITE}\s+(?:в\s+)?{_OBS}\s*[:,\-]?\s*(?P<text>.*)$",
+        re.IGNORECASE | re.DOTALL,
+    ),
+]
+
+
+async def _obsidian(m: re.Match) -> str:
+    text = m.group("text").strip()
+    if not text:
+        return "Nima yozay? Masalan: «Obsidian'ga yoz: ertaga soat 9 da uchrashuv»."
+    await macos.obsidian_write(macos.NoteArgs(text=text))
+    return f"Obsidian'ga yozdim va ochdim: «{text}»."
+
+
 async def _note_list(_m) -> str:
     r = await macos.list_notes(macos.ListNotesArgs(limit=5))
     if not r["notes"]:
@@ -213,6 +245,10 @@ class _AppMatch:
 
 def match(text: str) -> tuple[Rule, object] | None:
     """Mos kelgan qoida va match obyekti; hech biri mos kelmasa None."""
+    for pattern in _OBSIDIAN:
+        obs = pattern.match(text.strip())
+        if obs:
+            return Rule("obsidian.write", pattern, _obsidian), obs
     note = _NOTE_ADD.match(text.strip())
     if note:
         return Rule("notes.add", _NOTE_ADD, _note_add), note

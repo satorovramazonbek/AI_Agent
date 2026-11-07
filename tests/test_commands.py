@@ -1,4 +1,5 @@
 import asyncio
+import json
 
 import pytest
 
@@ -197,3 +198,73 @@ def test_not_on_mac(monkeypatch):
 
 def test_unknown_returns_none():
     assert run(run_command("Menga she'r yozib ber")) is None
+
+
+# ---------- Obsidian ----------
+
+
+@pytest.mark.parametrize(
+    "text, expected",
+    [
+        ("Obsidianni och va yozib qo'y: ertaga uchrashuv", "ertaga uchrashuv"),
+        ("Jarvis, Obsidian'ni och, bu ma'lumotlarni yozib qo'y: Django darsini takrorlash",
+         "Django darsini takrorlash"),
+        ("Obsidian'ga yoz: non olish", "non olish"),
+        ("Obsidianga saqlab qo'y kitob ro'yxati", "kitob ro'yxati"),
+        ("Yozib qo'y obsidianga: sut", "sut"),
+        ("Открой обсидиан и запиши купить хлеб", "купить хлеб"),
+        ("Запиши в обсидиан: позвонить маме", "позвонить маме"),
+        ("Обсидианни оч ва ёзиб қўй: эртага учрашув", "эртага учрашув"),
+        ("Obsidianni och va yozib qo'y", ""),
+    ],
+)
+def test_obsidian_phrases(text, expected):
+    rule, m = match(text)
+    assert rule.name == "obsidian.write"
+    assert m.group("text").strip() == expected
+
+
+@pytest.mark.parametrize("text", ["Obsidianni och", "Obsidiandagi yozuvlarimni o'qi"])
+def test_obsidian_open_is_not_write(text):
+    assert rule_of(text) != "obsidian.write"
+
+
+def test_obsidian_write_to_vault(tmp_path, monkeypatch, fake_mac):
+    calls, _ = fake_mac
+    vault = tmp_path / "Core"
+    vault.mkdir()
+    monkeypatch.setattr(macos, "obsidian_vault", lambda: vault)
+    monkeypatch.setattr(
+        macos, "get_settings", lambda: type("S", (), {"notes_file": None, "obsidian_vault": None})
+    )
+    reply = run(run_command("Obsidianni och va yozib qo'y: ertaga uchrashuv"))
+    assert "ertaga uchrashuv" in reply
+    note = (vault / "JARVIS" / "Eslatmalar.md").read_text()
+    assert note.startswith("# JARVIS eslatmalari") and "ertaga uchrashuv" in note
+    assert ("open", "obsidian://open?vault=Core&file=JARVIS/Eslatmalar") in calls
+
+
+def test_obsidian_empty_asks_what_to_write(fake_mac):
+    calls, _ = fake_mac
+    assert "Nima yozay" in run(run_command("Obsidianni och va yozib qo'y"))
+    assert calls == []
+
+
+def test_vault_autodetect(tmp_path, monkeypatch):
+    v1, v2 = tmp_path / "Old", tmp_path / "Core"
+    v1.mkdir()
+    v2.mkdir()
+    cfg = tmp_path / "obsidian.json"
+    vaults = {
+        "a": {"path": str(v1), "ts": 5},
+        "b": {"path": str(v2), "ts": 1, "open": True},
+        "c": {"path": "/yoq/papka", "ts": 9, "open": True},  # o'chirilgan vault
+    }
+    cfg.write_text(json.dumps({"vaults": vaults}))
+    monkeypatch.setattr(macos, "OBSIDIAN_CONFIG", cfg)
+    monkeypatch.setattr(macos, "get_settings", lambda: type("S", (), {"obsidian_vault": None}))
+    assert macos.obsidian_vault() == v2  # ochiq va mavjud vault
+
+
+def test_uri_outside_vault_is_none(tmp_path):
+    assert macos.obsidian_uri(tmp_path / "x.md", tmp_path / "Core") is None

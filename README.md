@@ -84,11 +84,18 @@ curl -F file=@ovoz.ogg http://127.0.0.1:8020/voice/transcribe
 | «Soat necha?», «Bugun nechanchi?», «Сколько времени?» | vaqt / sana |
 | «Batareya qancha?», «Kompyuter holati» | batareya / tizim |
 | «Ekranni qulfla» | ekran o'chadi |
-| «Eslatma: non olish», «Eslatmalarimni o'qi» | `~/Documents/JARVIS/eslatmalar.md` |
+| «Eslatma: non olish», «Eslatmalarimni o'qi» | eslatma yoziladi / o'qiladi |
+| «Obsidianni och va yozib qo'y: …», «Obsidian'ga yoz: …», «Запиши в обсидиан …» | Obsidian'ga yoziladi va ochiladi |
 | «Nima qila olasan?» | buyruqlar ro'yxati |
 
 Buyruq tanilmasa va `ANTHROPIC_API_KEY` bo'lsa, gap agentga uzatiladi; kalit bo'lmasa JARVIS
-buyruqlar ro'yxatini ko'rsatadi. Dastur yopishda macOS bir marta «boshqarishga ruxsat» so'raydi.
+buyruqlar ro'yxatini ko'rsatadi.
+
+Eslatmalar Obsidian vault'ida saqlanadi: `<vault>/JARVIS/Eslatmalar.md` (vault Obsidian
+sozlamalaridan avtomatik topiladi; boshqasi kerak bo'lsa — `JARVIS_OBSIDIAN_VAULT`). Obsidian
+bo'lmasa — `~/Documents/JARVIS/eslatmalar.md`. Boshqa fayl uchun — `JARVIS_NOTES_FILE`.
+
+Dastur yopishda macOS bir marta «boshqarishga ruxsat» so'raydi.
 
 ## Agent (ixtiyoriy, pullik)
 

@@ -8,12 +8,14 @@ from __future__ import annotations
 
 import asyncio
 import difflib
+import json
 import re
 import sys
 from datetime import datetime
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal
+from urllib.parse import quote
 
 from pydantic import BaseModel, Field
 
@@ -253,8 +255,33 @@ async def now(args: NoArgs) -> dict:
 # ---------- Eslatmalar (lokal fayl, ruxsat so'ramaydi) ----------
 
 
+OBSIDIAN_CONFIG = Path.home() / "Library" / "Application Support" / "obsidian" / "obsidian.json"
+
+
+def obsidian_vault() -> Path | None:
+    """Sozlamadagi vault yoki Obsidian'da oxirgi ochilgan vault."""
+    s = get_settings()
+    if s.obsidian_vault:
+        return s.obsidian_vault
+    try:
+        vaults = json.loads(OBSIDIAN_CONFIG.read_text(encoding="utf-8"))["vaults"].values()
+    except (OSError, ValueError, KeyError):
+        return None
+    vaults = [v for v in vaults if Path(v.get("path", "")).is_dir()]
+    if not vaults:
+        return None
+    best = max(vaults, key=lambda v: (bool(v.get("open")), v.get("ts", 0)))
+    return Path(best["path"])
+
+
 def notes_file() -> Path:
-    return get_settings().notes_file
+    s = get_settings()
+    if s.notes_file:
+        return s.notes_file
+    vault = obsidian_vault()
+    if vault:
+        return vault / "JARVIS" / "Eslatmalar.md"
+    return Path.home() / "Documents" / "JARVIS" / "eslatmalar.md"
 
 
 class NoteArgs(BaseModel):
@@ -266,7 +293,10 @@ async def add_note(args: NoteArgs) -> dict:
     path = notes_file()
     path.parent.mkdir(parents=True, exist_ok=True)
     stamp = datetime.now().strftime("%Y-%m-%d %H:%M")
+    new = not path.exists()
     with path.open("a", encoding="utf-8") as f:
+        if new:
+            f.write("# JARVIS eslatmalari\n\n")
         f.write(f"- [{stamp}] {args.text.strip()}\n")
     return {"status": "ok", "file": str(path)}
 
@@ -281,3 +311,31 @@ async def list_notes(args: ListNotesArgs) -> dict:
     lines = path.read_text(encoding="utf-8").splitlines() if path.exists() else []
     notes = [ln[2:] for ln in lines if ln.startswith("- ")]
     return {"total": len(notes), "notes": notes[-args.limit :]}
+
+
+def obsidian_uri(path: Path, vault: Path | None) -> str | None:
+    """Fayl vault ichida bo'lsa, uni Obsidian'da ochadigan obsidian:// havola."""
+    if vault is None:
+        return None
+    try:
+        rel = path.resolve().relative_to(vault.resolve())
+    except ValueError:
+        return None
+    return f"obsidian://open?vault={quote(vault.name)}&file={quote(str(rel.with_suffix('')))}"
+
+
+@tool(
+    name="obsidian.write",
+    description="Matnni Obsidian'dagi JARVIS eslatmalariga yozadi va Obsidian'da ochadi",
+    risk=Risk.R1,
+    tags=["macos", "secretary"],
+)
+async def obsidian_write(args: NoteArgs) -> dict:
+    saved = await add_note(args)
+    path = Path(saved["file"])
+    uri = obsidian_uri(path, obsidian_vault())
+    if uri:
+        await _run("open", uri)
+    else:
+        await _run("open", "-a", "Obsidian")
+    return {"status": "ok", "file": str(path), "opened": uri or "Obsidian"}
